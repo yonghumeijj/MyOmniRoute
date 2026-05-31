@@ -8,6 +8,16 @@
 
 ### Never stop coding. Connect every AI tool to **177 providers** — **50+ free** — through one endpoint.
 
+> **MyOmniRoute 修改版说明**
+>
+> 本仓库基于 OmniRoute 源码做了面向多 OAuth 账号池的增强，方便用 Docker 部署后给 sub2api / Codex / Claude Code 等下游客户端使用。
+>
+> - 新增 API Key 级别的账号标签限制：可在 API Key 权限中按 OAuth 账号的 `Routing Tags Label` 选择 `plus`、`free` 等分组。
+> - 修复标签无匹配账号时的安全问题：现在会 fail closed，不会退回到全部账号。
+> - 优化标签过滤性能：只读取轻量字段，并在单次请求内缓存 provider + tag 匹配结果。
+> - 修复 Codex 提供商页面已有账号时看不到 `Import auth` 入口的问题。
+> - 推荐用法：给 plus/free 等账号分别设置 `Routing Tags Label`，再给下游服务分配不同 OmniRoute API Key。
+
 **Plug Claude Code, Codex, Cursor, Cline, Copilot & Antigravity into FREE Claude / GPT / Gemini. Auto-fallback.**
 <br/>
 
@@ -757,60 +767,60 @@ Compression: aggressive (~50%) → double your free quota · Cost: $0/mo
 
 ### 📘 Getting Started
 
-| Document                              | Description                                                                   |
-| ------------------------------------- | ----------------------------------------------------------------------------- |
-| [User Guide](docs/guides/USER_GUIDE.md)      | Providers, combos, CLI integration, deployment                                |
-| [Setup Guide](docs/guides/SETUP_GUIDE.md)    | Full install methods, CLI tool configs, protocol setup, timeout tuning        |
+| Document                                       | Description                                                                   |
+| ---------------------------------------------- | ----------------------------------------------------------------------------- |
+| [User Guide](docs/guides/USER_GUIDE.md)        | Providers, combos, CLI integration, deployment                                |
+| [Setup Guide](docs/guides/SETUP_GUIDE.md)      | Full install methods, CLI tool configs, protocol setup, timeout tuning        |
 | [CLI Tools Guide](docs/reference/CLI-TOOLS.md) | Per-tool setup for Claude Code, Codex, Cursor, Cline, OpenClaw, Kilo, Copilot |
-| [Quick Start](README.md#-quick-start) | 3-step install → connect → configure                                          |
+| [Quick Start](README.md#-quick-start)          | 3-step install → connect → configure                                          |
 
 ### 🔧 Operations & Deployment
 
-| Document                                             | Description                                                    |
-| ---------------------------------------------------- | -------------------------------------------------------------- |
-| [Docker Guide](docs/guides/DOCKER_GUIDE.md)                 | Docker run, Compose profiles, Caddy HTTPS, tunnels, image tags |
+| Document                                                 | Description                                                    |
+| -------------------------------------------------------- | -------------------------------------------------------------- |
+| [Docker Guide](docs/guides/DOCKER_GUIDE.md)              | Docker run, Compose profiles, Caddy HTTPS, tunnels, image tags |
 | [VM Deployment](docs/ops/VM_DEPLOYMENT_GUIDE.md)         | Complete guide: VM + nginx + Cloudflare setup                  |
 | [Fly.io Deployment](docs/ops/FLY_IO_DEPLOYMENT_GUIDE.md) | Deploy to Fly.io with persistent storage                       |
-| [Termux Guide](docs/guides/TERMUX_GUIDE.md)                 | Run OmniRoute on Android via Termux                            |
-| [PWA Guide](docs/guides/PWA_GUIDE.md)                       | Progressive Web App install, caching, architecture             |
-| [Uninstall Guide](docs/guides/UNINSTALL.md)                 | Clean removal for all install methods                          |
-| [Environment Config](docs/reference/ENVIRONMENT.md)            | Complete `.env` variables and references                       |
+| [Termux Guide](docs/guides/TERMUX_GUIDE.md)              | Run OmniRoute on Android via Termux                            |
+| [PWA Guide](docs/guides/PWA_GUIDE.md)                    | Progressive Web App install, caching, architecture             |
+| [Uninstall Guide](docs/guides/UNINSTALL.md)              | Clean removal for all install methods                          |
+| [Environment Config](docs/reference/ENVIRONMENT.md)      | Complete `.env` variables and references                       |
 
 ### 🧠 Features & Architecture
 
-| Document                                                         | Description                                                                   |
-| ---------------------------------------------------------------- | ----------------------------------------------------------------------------- |
-| [Architecture](docs/architecture/ARCHITECTURE.md)                          | System architecture, data flow, and internals                                 |
-| [Compression Guide](docs/compression/COMPRESSION_GUIDE.md)                | 7-option pipeline: off / lite / standard / aggressive / ultra / RTK / stacked |
-| [RTK Compression](docs/compression/RTK_COMPRESSION.md)                    | Command-output compression, filters, trust, verify, raw-output recovery       |
-| [Compression Engines](docs/compression/COMPRESSION_ENGINES.md)            | Caveman, RTK, stacked pipelines, dashboard/API/MCP surfaces                   |
-| [Compression Rules Format](docs/compression/COMPRESSION_RULES_FORMAT.md)  | JSON rule-pack schemas for Caveman and RTK filters                            |
-| [Compression Language Packs](docs/compression/COMPRESSION_LANGUAGE_PACKS.md) | Language detection and Caveman rule-pack authoring                         |
-| [Resilience Guide](docs/architecture/RESILIENCE_GUIDE.md)                 | Circuit breakers, cooldowns, queue, anti-thundering herd, TLS spoofing        |
-| [Auto-Combo Engine](docs/routing/AUTO-COMBO.md)                           | 6-factor scoring, mode packs, self-healing                                    |
-| [Proxy Guide](docs/ops/PROXY_GUIDE.md)                                    | 3-level proxy system, 1proxy marketplace, registry CRUD                       |
-| [Free Tiers](docs/reference/FREE_TIERS.md)                                | 25+ free API providers consolidated directory                                 |
-| [Features Gallery](docs/guides/FEATURES.md)                               | Visual dashboard tour with screenshots                                        |
-| [Codebase Documentation](docs/architecture/CODEBASE_DOCUMENTATION.md)      | Beginner-friendly codebase walkthrough                                        |
+| Document                                                                     | Description                                                                   |
+| ---------------------------------------------------------------------------- | ----------------------------------------------------------------------------- |
+| [Architecture](docs/architecture/ARCHITECTURE.md)                            | System architecture, data flow, and internals                                 |
+| [Compression Guide](docs/compression/COMPRESSION_GUIDE.md)                   | 7-option pipeline: off / lite / standard / aggressive / ultra / RTK / stacked |
+| [RTK Compression](docs/compression/RTK_COMPRESSION.md)                       | Command-output compression, filters, trust, verify, raw-output recovery       |
+| [Compression Engines](docs/compression/COMPRESSION_ENGINES.md)               | Caveman, RTK, stacked pipelines, dashboard/API/MCP surfaces                   |
+| [Compression Rules Format](docs/compression/COMPRESSION_RULES_FORMAT.md)     | JSON rule-pack schemas for Caveman and RTK filters                            |
+| [Compression Language Packs](docs/compression/COMPRESSION_LANGUAGE_PACKS.md) | Language detection and Caveman rule-pack authoring                            |
+| [Resilience Guide](docs/architecture/RESILIENCE_GUIDE.md)                    | Circuit breakers, cooldowns, queue, anti-thundering herd, TLS spoofing        |
+| [Auto-Combo Engine](docs/routing/AUTO-COMBO.md)                              | 6-factor scoring, mode packs, self-healing                                    |
+| [Proxy Guide](docs/ops/PROXY_GUIDE.md)                                       | 3-level proxy system, 1proxy marketplace, registry CRUD                       |
+| [Free Tiers](docs/reference/FREE_TIERS.md)                                   | 25+ free API providers consolidated directory                                 |
+| [Features Gallery](docs/guides/FEATURES.md)                                  | Visual dashboard tour with screenshots                                        |
+| [Codebase Documentation](docs/architecture/CODEBASE_DOCUMENTATION.md)        | Beginner-friendly codebase walkthrough                                        |
 
 ### 🤖 Protocols & APIs
 
-| Document                                    | Description                                         |
-| ------------------------------------------- | --------------------------------------------------- |
-| [API Reference](docs/reference/API_REFERENCE.md)         | All endpoints with examples                         |
-| [OpenAPI Spec](docs/reference/openapi.yaml)               | OpenAPI 3.0 specification                           |
-| [MCP Server](open-sse/mcp-server/README.md) | 29 MCP tools, IDE configs, Python/TS/Go clients     |
-| [MCP Server Guide](docs/frameworks/MCP-SERVER.md)         | MCP installation, transports, and tool reference    |
-| [A2A Server](src/lib/a2a/README.md)         | JSON-RPC 2.0 protocol, skills, streaming, task mgmt |
-| [A2A Server Guide](docs/frameworks/A2A-SERVER.md)         | A2A agent card, tasks, skills, and streaming        |
+| Document                                          | Description                                         |
+| ------------------------------------------------- | --------------------------------------------------- |
+| [API Reference](docs/reference/API_REFERENCE.md)  | All endpoints with examples                         |
+| [OpenAPI Spec](docs/reference/openapi.yaml)       | OpenAPI 3.0 specification                           |
+| [MCP Server](open-sse/mcp-server/README.md)       | 29 MCP tools, IDE configs, Python/TS/Go clients     |
+| [MCP Server Guide](docs/frameworks/MCP-SERVER.md) | MCP installation, transports, and tool reference    |
+| [A2A Server](src/lib/a2a/README.md)               | JSON-RPC 2.0 protocol, skills, streaming, task mgmt |
+| [A2A Server Guide](docs/frameworks/A2A-SERVER.md) | A2A agent card, tasks, skills, and streaming        |
 
 ### 📋 Project & Quality
 
-| Document                                       | Description                                     |
-| ---------------------------------------------- | ----------------------------------------------- |
-| [Contributing](CONTRIBUTING.md)                | Development setup and guidelines                |
-| [Security Policy](SECURITY.md)                 | Vulnerability reporting and security practices  |
-| [i18n Guide](docs/guides/I18N.md)                     | 40+ language support, translation workflow, RTL |
+| Document                                           | Description                                     |
+| -------------------------------------------------- | ----------------------------------------------- |
+| [Contributing](CONTRIBUTING.md)                    | Development setup and guidelines                |
+| [Security Policy](SECURITY.md)                     | Vulnerability reporting and security practices  |
+| [i18n Guide](docs/guides/I18N.md)                  | 40+ language support, translation workflow, RTL |
 | [Release Checklist](docs/ops/RELEASE_CHECKLIST.md) | Pre-release validation steps                    |
 | [Coverage Plan](docs/ops/COVERAGE_PLAN.md)         | Test coverage strategy and 4,690+ test suite    |
 

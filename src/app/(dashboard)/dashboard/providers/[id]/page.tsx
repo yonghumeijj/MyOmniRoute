@@ -4119,6 +4119,18 @@ export default function ProviderDetailPage() {
                           Experimental OAuth
                         </Button>
                       )}
+                      {providerId === "codex" && (
+                        <Button
+                          size="sm"
+                          variant="secondary"
+                          icon="upload_file"
+                          onClick={() => gateConnectionFlow(() => setImportCodexModalOpen(true))}
+                        >
+                          {typeof t.has === "function" && t.has("importCodexAuth")
+                            ? t("importCodexAuth")
+                            : "Import auth"}
+                        </Button>
+                      )}
                       {providerId === "claude" && (
                         <Button
                           size="sm"
@@ -4148,7 +4160,11 @@ export default function ProviderDetailPage() {
                 </>
               ) : (
                 connections.length === 0 && (
-                  <Button size="sm" icon="add" onClick={() => gateConnectionFlow(openApiKeyAddFlow)}>
+                  <Button
+                    size="sm"
+                    icon="add"
+                    onClick={() => gateConnectionFlow(openApiKeyAddFlow)}
+                  >
                     {t("add")}
                   </Button>
                 )

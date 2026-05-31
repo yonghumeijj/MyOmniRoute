@@ -72,6 +72,20 @@ test("1.5 — allowedConnections array vazio é aceito (não é undefined, super
   assert.equal(result.success, true);
 });
 
+test("1.6 - allowedConnectionTags aceita tags nao vazias", () => {
+  const result = schemas.validateBody(schemas.updateKeyPermissionsSchema, {
+    allowedConnectionTags: ["plus", "free-tier"],
+  });
+  assert.equal(result.success, true);
+});
+
+test("1.7 - allowedConnectionTags rejeita strings vazias", () => {
+  const result = schemas.validateBody(schemas.updateKeyPermissionsSchema, {
+    allowedConnectionTags: [""],
+  });
+  assert.equal(result.success, false);
+});
+
 // ══════════════════════════════════════════════════════════════════
 // Bloco 2 — DB (apiKeys.ts)
 // ══════════════════════════════════════════════════════════════════
@@ -130,6 +144,20 @@ test("2.5 — allowedConnections: [] persiste como array vazio (não null)", asy
   const row = await apiKeysDb.getApiKeyById(created.id);
   assert.ok(Array.isArray(row?.allowedConnections));
   assert.deepEqual(row?.allowedConnections, []);
+});
+
+test("2.6 - allowedConnectionTags persiste tags normalizadas", async () => {
+  const created = await apiKeysDb.createApiKey("tag-key", "machine-t08");
+
+  await apiKeysDb.updateApiKeyPermissions(created.id, {
+    allowedConnectionTags: [" Plus ", "plus", "FREE"],
+  });
+
+  const row = await apiKeysDb.getApiKeyById(created.id);
+  assert.deepEqual(row?.allowedConnectionTags, ["plus", "free"]);
+
+  const meta = await apiKeysDb.getApiKeyMetadata(created.key);
+  assert.deepEqual(meta?.allowedConnectionTags, ["plus", "free"]);
 });
 
 test("2.6 — cache é invalidado após update (2ª chamada ao metadata reflete novo valor)", async () => {

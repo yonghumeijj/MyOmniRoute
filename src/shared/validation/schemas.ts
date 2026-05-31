@@ -1846,6 +1846,7 @@ export const updateKeyPermissionsSchema = z
     allowedModels: z.array(z.string().trim().min(1)).max(1000).optional(),
     allowedCombos: z.array(z.string().trim().min(1).max(200)).max(500).optional(),
     allowedConnections: z.array(z.string().uuid()).max(100).optional(),
+    allowedConnectionTags: z.array(z.string().trim().min(1).max(64)).max(200).optional(),
     noLog: z.boolean().optional(),
     autoResolve: z.boolean().optional(),
     isActive: z.boolean().optional(),
@@ -1873,6 +1874,7 @@ export const updateKeyPermissionsSchema = z
       value.allowedModels === undefined &&
       value.allowedCombos === undefined &&
       value.allowedConnections === undefined &&
+      value.allowedConnectionTags === undefined &&
       value.noLog === undefined &&
       value.autoResolve === undefined &&
       value.isActive === undefined &&

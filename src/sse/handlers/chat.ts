@@ -38,12 +38,14 @@ import {
   getCachedSettings,
   getCombos,
   getSessionAccountAffinity,
+  getProviderConnections,
 } from "@/lib/localDb";
 import {
   ensureOpenAIStoreSessionFallback,
   isOpenAIResponsesStoreEnabled,
 } from "@/lib/providers/requestDefaults";
 import { guardrailRegistry, resolveDisabledGuardrails } from "@/lib/guardrails";
+import { getConnectionRoutingTags, normalizeRoutingTags } from "@/domain/tagRouter";
 import {
   resolveModelOrError,
   checkPipelineGates,
@@ -155,6 +157,47 @@ function intersectAllowedConnectionIds(primary: unknown, secondary: unknown): st
   }
 
   return first || second || null;
+}
+
+async function resolveApiKeyAllowedConnectionIdsForProvider(
+  provider: string,
+  apiKeyInfo: {
+    allowedConnections?: string[] | null;
+    allowedConnectionTags?: string[] | null;
+  } | null,
+  targetAllowedConnectionIds: unknown
+): Promise<string[] | null> {
+  const explicitAllowed = intersectAllowedConnectionIds(
+    apiKeyInfo?.allowedConnections ?? null,
+    targetAllowedConnectionIds
+  );
+  const requestedTags = normalizeRoutingTags(apiKeyInfo?.allowedConnectionTags ?? null);
+
+  if (requestedTags.length === 0) {
+    return explicitAllowed;
+  }
+
+  try {
+    const connections = await getProviderConnections({ provider, isActive: true });
+    const tagSet = new Set(requestedTags);
+    const tagAllowedIds = (Array.isArray(connections) ? connections : [])
+      .filter((connection: Record<string, unknown>) => {
+        const connectionTags = getConnectionRoutingTags(connection.providerSpecificData);
+        return connectionTags.some((tag) => tagSet.has(tag));
+      })
+      .map((connection: Record<string, unknown>) =>
+        typeof connection.id === "string" ? connection.id : null
+      )
+      .filter((id): id is string => typeof id === "string" && id.trim().length > 0);
+
+    return intersectAllowedConnectionIds(explicitAllowed, tagAllowedIds);
+  } catch (error) {
+    log.warn(
+      "AUTH",
+      `Failed to resolve API key connection tags for provider=${provider}: ${error instanceof Error ? error.message : String(error)}`
+    );
+    return [];
+  }
 }
 
 const PROVIDER_BREAKER_FAILURE_STATUSES = new Set([408, 500, 502, 503, 504]);
@@ -463,10 +506,9 @@ export async function handleChat(request: any, clientRawRequest: any = null) {
       if (!provider) return true; // can't determine provider, let it try
 
       const resolvedModel = modelInfo.model || modelString;
-      const hasForcedConnection =
-        typeof target?.connectionId === "string" && target.connectionId.trim().length > 0;
-      const allowedConnections = intersectAllowedConnectionIds(
-        apiKeyInfo?.allowedConnections ?? null,
+      const allowedConnections = await resolveApiKeyAllowedConnectionIdsForProvider(
+        provider,
+        apiKeyInfo,
         target?.allowedConnectionIds ?? null
       );
 
@@ -738,7 +780,14 @@ async function handleSingleModelChat(
     });
   }
 
-  const { provider: resolvedProvider, model, sourceFormat, targetFormat, extendedContext, apiFormat } = resolved;
+  const {
+    provider: resolvedProvider,
+    model,
+    sourceFormat,
+    targetFormat,
+    extendedContext,
+    apiFormat,
+  } = resolved;
   // Prefer the combo target's providerId when available — the model string's
   // provider prefix may differ from the credential provider ID (e.g. model
   // "xiaomi/mimo-v2-flash" resolves to provider "xiaomi" but the combo target
@@ -748,8 +797,9 @@ async function handleSingleModelChat(
   const hasForcedConnection =
     typeof runtimeOptions.forcedConnectionId === "string" &&
     runtimeOptions.forcedConnectionId.trim().length > 0;
-  const effectiveAllowedConnections = intersectAllowedConnectionIds(
-    apiKeyInfo?.allowedConnections ?? null,
+  const effectiveAllowedConnections = await resolveApiKeyAllowedConnectionIdsForProvider(
+    provider,
+    apiKeyInfo,
     runtimeOptions.allowedConnectionIds ?? null
   );
   const bypassReason = forceLiveComboTest
@@ -1290,8 +1340,11 @@ async function handleSingleModelChat(
             model,
             providerProfile,
             {
-              persistUnavailableState:
-                !(isCombo && result.status === 429 && (failureKind === "rate_limit" || failureKind === "transient")),
+              persistUnavailableState: !(
+                isCombo &&
+                result.status === 429 &&
+                (failureKind === "rate_limit" || failureKind === "transient")
+              ),
             }
           );
 

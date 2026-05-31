@@ -42,6 +42,7 @@ interface ApiKeyMetadata {
   allowedModels: string[];
   allowedCombos: string[];
   allowedConnections: string[];
+  allowedConnectionTags: string[];
   noLog: boolean;
   autoResolve: boolean;
   isActive: boolean;
@@ -74,6 +75,8 @@ interface ApiKeyRow extends JsonRecord {
   allowedCombos?: unknown;
   allowed_connections?: unknown;
   allowedConnections?: unknown;
+  allowed_connection_tags?: unknown;
+  allowedConnectionTags?: unknown;
   no_log?: unknown;
   noLog?: unknown;
   auto_resolve?: unknown;
@@ -111,6 +114,7 @@ interface ApiKeyView extends JsonRecord {
   allowedModels: string[];
   allowedCombos: string[];
   allowedConnections: string[];
+  allowedConnectionTags: string[];
   noLog: boolean;
   autoResolve: boolean;
   isActive: boolean;
@@ -139,6 +143,7 @@ const API_KEY_COLUMN_FALLBACKS = [
   { name: "allowed_combos", definition: "allowed_combos TEXT" },
   { name: "no_log", definition: "no_log INTEGER NOT NULL DEFAULT 0" },
   { name: "allowed_connections", definition: "allowed_connections TEXT" },
+  { name: "allowed_connection_tags", definition: "allowed_connection_tags TEXT" },
   { name: "auto_resolve", definition: "auto_resolve INTEGER NOT NULL DEFAULT 0" },
   { name: "is_active", definition: "is_active INTEGER NOT NULL DEFAULT 1" },
   { name: "access_schedule", definition: "access_schedule TEXT" },
@@ -355,7 +360,7 @@ function getPreparedStatements(db: ApiKeysDbLike): ApiKeysStatements {
       "SELECT id, expires_at, revoked_at, is_active, is_banned FROM api_keys WHERE key = ? OR key_hash = ?"
     );
     _stmtGetKeyMetadata = db.prepare<ApiKeyRow>(
-      "SELECT id, name, machine_id, allowed_models, allowed_combos, allowed_connections, no_log, auto_resolve, is_active, access_schedule, max_requests_per_day, max_requests_per_minute, throttle_delay_ms, max_sessions, revoked_at, expires_at, ip_allowlist, scopes, rate_limits, is_banned, key_hash, allowed_endpoints FROM api_keys WHERE key = ? OR key_hash = ?"
+      "SELECT id, name, machine_id, allowed_models, allowed_combos, allowed_connections, allowed_connection_tags, no_log, auto_resolve, is_active, access_schedule, max_requests_per_day, max_requests_per_minute, throttle_delay_ms, max_sessions, revoked_at, expires_at, ip_allowlist, scopes, rate_limits, is_banned, key_hash, allowed_endpoints FROM api_keys WHERE key = ? OR key_hash = ?"
     );
     _stmtInsertKey = db.prepare(
       "INSERT INTO api_keys (id, name, key, machine_id, allowed_models, no_log, created_at, key_prefix, key_hash, scopes) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
@@ -393,6 +398,7 @@ export async function getApiKeys() {
     camelRow.allowedModels = parseAllowedModels(camelRow.allowedModels);
     camelRow.allowedCombos = parseAllowedCombos(camelRow.allowedCombos);
     camelRow.allowedConnections = parseAllowedConnections(camelRow.allowedConnections);
+    camelRow.allowedConnectionTags = parseAllowedConnectionTags(camelRow.allowedConnectionTags);
     camelRow.noLog = parseNoLog(camelRow.noLog);
     camelRow.autoResolve = parseAutoResolve(camelRow.autoResolve);
     camelRow.isActive = parseIsActive(camelRow.isActive);
@@ -417,6 +423,7 @@ export async function getApiKeyById(id: string) {
   camelRow.allowedModels = parseAllowedModels(camelRow.allowedModels);
   camelRow.allowedCombos = parseAllowedCombos(camelRow.allowedCombos);
   camelRow.allowedConnections = parseAllowedConnections(camelRow.allowedConnections);
+  camelRow.allowedConnectionTags = parseAllowedConnectionTags(camelRow.allowedConnectionTags);
   camelRow.noLog = parseNoLog(camelRow.noLog);
   camelRow.autoResolve = parseAutoResolve(camelRow.autoResolve);
   camelRow.isActive = parseIsActive(camelRow.isActive);
@@ -525,6 +532,26 @@ function parseAllowedConnections(value: unknown): string[] {
     return Array.isArray(parsed)
       ? parsed.filter((entry): entry is string => typeof entry === "string")
       : [];
+  } catch {
+    return [];
+  }
+}
+
+function parseAllowedConnectionTags(value: unknown): string[] {
+  if (!value || typeof value !== "string" || value.trim() === "") {
+    return [];
+  }
+  try {
+    const parsed = JSON.parse(value);
+    if (!Array.isArray(parsed)) return [];
+    return Array.from(
+      new Set(
+        parsed
+          .filter((entry): entry is string => typeof entry === "string")
+          .map((entry) => entry.trim().toLowerCase())
+          .filter(Boolean)
+      )
+    );
   } catch {
     return [];
   }
@@ -647,6 +674,7 @@ export async function updateApiKeyPermissions(
         allowedModels?: string[];
         allowedCombos?: string[];
         allowedConnections?: string[];
+        allowedConnectionTags?: string[];
         noLog?: boolean;
         autoResolve?: boolean;
         isActive?: boolean;
@@ -674,6 +702,7 @@ export async function updateApiKeyPermissions(
           allowedModels: update.allowedModels,
           allowedCombos: update.allowedCombos,
           allowedConnections: update.allowedConnections,
+          allowedConnectionTags: update.allowedConnectionTags,
           noLog: update.noLog,
           autoResolve: update.autoResolve,
           isActive: update.isActive,
@@ -694,6 +723,7 @@ export async function updateApiKeyPermissions(
     normalized.allowedModels === undefined &&
     normalized.allowedCombos === undefined &&
     normalized.allowedConnections === undefined &&
+    normalized.allowedConnectionTags === undefined &&
     normalized.noLog === undefined &&
     normalized.autoResolve === undefined &&
     normalized.isActive === undefined &&
@@ -718,6 +748,7 @@ export async function updateApiKeyPermissions(
     allowedModels?: string;
     allowedCombos?: string;
     allowedConnections?: string;
+    allowedConnectionTags?: string;
     noLog?: number;
     autoResolve?: number;
     isActive?: number;
@@ -750,9 +781,17 @@ export async function updateApiKeyPermissions(
   }
 
   if (normalized.allowedConnections !== undefined) {
-    // Empty array means all connections are allowed
+    // Empty array means all connections are allowed unless tags are configured.
     updates.push("allowed_connections = @allowedConnections");
     params.allowedConnections = JSON.stringify(normalized.allowedConnections || []);
+  }
+
+  if (normalized.allowedConnectionTags !== undefined) {
+    // Empty array means no tag-based restriction.
+    updates.push("allowed_connection_tags = @allowedConnectionTags");
+    params.allowedConnectionTags = JSON.stringify(
+      parseAllowedConnectionTags(JSON.stringify(normalized.allowedConnectionTags || []))
+    );
   }
 
   if (normalized.noLog !== undefined) {
@@ -817,9 +856,7 @@ export async function updateApiKeyPermissions(
   if (allowedEndpointsUpdate !== undefined) {
     updates.push("allowed_endpoints = @allowedEndpoints");
     const nextEndpoints: string[] = Array.isArray(allowedEndpointsUpdate)
-      ? (allowedEndpointsUpdate as unknown[]).filter(
-          (s): s is string => typeof s === "string"
-        )
+      ? (allowedEndpointsUpdate as unknown[]).filter((s): s is string => typeof s === "string")
       : [];
     (params as Record<string, unknown>).allowedEndpoints = JSON.stringify(nextEndpoints);
   }
@@ -1155,6 +1192,7 @@ export async function getApiKeyMetadata(
       allowedModels: [],
       allowedCombos: [],
       allowedConnections: [],
+      allowedConnectionTags: [],
       noLog: false,
       autoResolve: true,
       isActive: true,
@@ -1207,6 +1245,9 @@ export async function getApiKeyMetadata(
     allowedCombos: parseAllowedCombos(record.allowed_combos ?? record.allowedCombos),
     allowedConnections: parseAllowedConnections(
       record.allowed_connections ?? record.allowedConnections
+    ),
+    allowedConnectionTags: parseAllowedConnectionTags(
+      record.allowed_connection_tags ?? record.allowedConnectionTags
     ),
     noLog: parseNoLog(record.no_log ?? record.noLog),
     autoResolve: parseAutoResolve(record.auto_resolve ?? record.autoResolve),

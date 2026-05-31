@@ -68,6 +68,7 @@ export async function PATCH(request, { params }) {
       allowedModels,
       allowedCombos,
       allowedConnections,
+      allowedConnectionTags,
       noLog,
       autoResolve,
       isActive,
@@ -88,6 +89,7 @@ export async function PATCH(request, { params }) {
     if (allowedModels !== undefined) payload.allowedModels = allowedModels;
     if (allowedCombos !== undefined) payload.allowedCombos = allowedCombos;
     if (allowedConnections !== undefined) payload.allowedConnections = allowedConnections;
+    if (allowedConnectionTags !== undefined) payload.allowedConnectionTags = allowedConnectionTags;
     if (noLog !== undefined) payload.noLog = noLog;
     if (autoResolve !== undefined) payload.autoResolve = autoResolve;
     if (isActive !== undefined) payload.isActive = isActive;
@@ -116,6 +118,7 @@ export async function PATCH(request, { params }) {
       ...(allowedModels !== undefined && { allowedModels }),
       ...(allowedCombos !== undefined && { allowedCombos }),
       ...(allowedConnections !== undefined && { allowedConnections }),
+      ...(allowedConnectionTags !== undefined && { allowedConnectionTags }),
       ...(noLog !== undefined && { noLog }),
       ...(autoResolve !== undefined && { autoResolve }),
       ...(isActive !== undefined && { isActive }),

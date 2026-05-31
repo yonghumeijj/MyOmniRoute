@@ -17,14 +17,8 @@ import {
 } from "./apiManagerPageUtils";
 import type { KeyStatus, KeyType } from "./apiManagerPageUtils";
 import { readActiveOnlyPreference, writeActiveOnlyPreference } from "./apiManagerPageStorage";
-import {
-  buildApiKeyCreateScopes,
-  mergeApiKeyPermissionScopes,
-} from "./apiManagerScopes";
-import {
-  SELF_ACCOUNT_QUOTA_SCOPE,
-  SELF_USAGE_SCOPE,
-} from "@/shared/constants/selfServiceScopes";
+import { buildApiKeyCreateScopes, mergeApiKeyPermissionScopes } from "./apiManagerScopes";
+import { SELF_ACCOUNT_QUOTA_SCOPE, SELF_USAGE_SCOPE } from "@/shared/constants/selfServiceScopes";
 
 // Constants for validation
 const MAX_KEY_NAME_LENGTH = 200;
@@ -100,6 +94,7 @@ interface ApiKey {
   allowedModels: string[] | null;
   allowedCombos: string[] | null;
   allowedConnections: string[] | null;
+  allowedConnectionTags?: string[] | null;
   noLog?: boolean;
   autoResolve?: boolean;
   isActive?: boolean;
@@ -122,6 +117,24 @@ interface ProviderConnection {
   name: string;
   provider: string;
   isActive: boolean;
+  providerSpecificData?: {
+    tag?: string;
+    tags?: string[];
+  } | null;
+}
+
+function normalizeConnectionTag(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const normalized = value.trim().toLowerCase();
+  return normalized.length > 0 ? normalized : null;
+}
+
+function getProviderConnectionRoutingTags(connection: ProviderConnection): string[] {
+  const rawTags = connection.providerSpecificData?.tags;
+  if (!Array.isArray(rawTags)) return [];
+  return Array.from(
+    new Set(rawTags.map((tag) => normalizeConnectionTag(tag)).filter((tag): tag is string => !!tag))
+  );
 }
 
 interface KeyUsageStats {
@@ -579,6 +592,7 @@ export default function ApiManagerPageClient() {
     allowedCombos: string[],
     noLog: boolean,
     allowedConnections: string[],
+    allowedConnectionTags: string[],
     autoResolve: boolean,
     isActive: boolean,
     throttleDelayMs: number,
@@ -619,6 +633,13 @@ export default function ApiManagerPageClient() {
     const validConnections = allowedConnections.filter(
       (id) => typeof id === "string" && /^[0-9a-f-]{36}$/i.test(id)
     );
+    const validConnectionTags = Array.from(
+      new Set(
+        allowedConnectionTags
+          .map((tag) => normalizeConnectionTag(tag))
+          .filter((tag): tag is string => !!tag)
+      )
+    );
     const normalizedMaxSessions =
       typeof maxSessions === "number" && Number.isFinite(maxSessions)
         ? Math.max(0, Math.floor(maxSessions))
@@ -640,6 +661,7 @@ export default function ApiManagerPageClient() {
           allowedModels: validModels,
           allowedCombos: validCombos,
           allowedConnections: validConnections,
+          allowedConnectionTags: validConnectionTags,
           noLog,
           autoResolve,
           isActive,
@@ -886,6 +908,8 @@ export default function ApiManagerPageClient() {
                 Array.isArray(key.allowedCombos) && key.allowedCombos.length > 0;
               const hasConnectionRestrictions =
                 Array.isArray(key.allowedConnections) && key.allowedConnections.length > 0;
+              const hasConnectionTagRestrictions =
+                Array.isArray(key.allowedConnectionTags) && key.allowedConnectionTags.length > 0;
               const noLogEnabled = key.noLog === true;
               const keyIsActive = key.isActive !== false; // default true
               const throttleDelayMs =
@@ -988,6 +1012,15 @@ export default function ApiManagerPageClient() {
                         >
                           <span className="material-symbols-outlined text-[14px]">cable</span>
                           {key.allowedConnections!.length} conn
+                        </button>
+                      )}
+                      {hasConnectionTagRestrictions && (
+                        <button
+                          onClick={() => handleOpenPermissions(key)}
+                          className="flex items-center gap-1.5 px-2 py-1 rounded-md bg-purple-500/10 text-purple-600 dark:text-purple-400 text-xs font-medium hover:bg-purple-500/20 transition-colors"
+                        >
+                          <span className="material-symbols-outlined text-[14px]">sell</span>
+                          {key.allowedConnectionTags.length} tags
                         </button>
                       )}
                       {hasComboRestrictions && (
@@ -1426,6 +1459,7 @@ const PermissionsModal = memo(function PermissionsModal({
     combos: string[],
     noLog: boolean,
     connections: string[],
+    connectionTags: string[],
     autoResolve: boolean,
     isActive: boolean,
     throttleDelayMs: number,
@@ -1448,6 +1482,9 @@ const PermissionsModal = memo(function PermissionsModal({
   const initialCombos = Array.isArray(apiKey?.allowedCombos) ? apiKey.allowedCombos : [];
   const initialConnections = Array.isArray(apiKey?.allowedConnections)
     ? apiKey.allowedConnections
+    : [];
+  const initialConnectionTags = Array.isArray(apiKey?.allowedConnectionTags)
+    ? apiKey.allowedConnectionTags
     : [];
   const [keyName, setKeyName] = useState(apiKey?.name ?? "");
   const [selectedModels, setSelectedModels] = useState<string[]>(initialModels);
@@ -1494,6 +1531,8 @@ const PermissionsModal = memo(function PermissionsModal({
   const [nameError, setNameError] = useState<string | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [selectedConnections, setSelectedConnections] = useState<string[]>(initialConnections);
+  const [selectedConnectionTags, setSelectedConnectionTags] =
+    useState<string[]>(initialConnectionTags);
   const [allowAllConnections, setAllowAllConnections] = useState(initialConnections.length === 0);
   const [expandedProviders, setExpandedProviders] = useState<Set<string>>(() => {
     // Expand all providers by default when in restrict mode with existing selections
@@ -1502,6 +1541,11 @@ const PermissionsModal = memo(function PermissionsModal({
     }
     return new Set();
   });
+  const connectionTagOptions = useMemo(() => {
+    return Array.from(
+      new Set(allConnections.flatMap((connection) => getProviderConnectionRoutingTags(connection)))
+    ).sort((a, b) => a.localeCompare(b));
+  }, [allConnections]);
 
   const initialEndpoints = Array.isArray(apiKey?.allowedEndpoints) ? apiKey.allowedEndpoints : [];
   const [selectedEndpoints, setSelectedEndpoints] = useState<string[]>(initialEndpoints);
@@ -1596,6 +1640,12 @@ const PermissionsModal = memo(function PermissionsModal({
     [allowAllConnections]
   );
 
+  const handleToggleConnectionTag = useCallback((tag: string) => {
+    setSelectedConnectionTags((prev) =>
+      prev.includes(tag) ? prev.filter((entry) => entry !== tag) : [...prev, tag]
+    );
+  }, []);
+
   const handleToggleEndpoint = useCallback(
     (categoryId: string) => {
       if (allowAllEndpoints) return;
@@ -1645,6 +1695,7 @@ const PermissionsModal = memo(function PermissionsModal({
       allowAllCombos ? [] : selectedCombos,
       noLogEnabled,
       allowAllConnections ? [] : selectedConnections,
+      selectedConnectionTags,
       autoResolveEnabled,
       keyIsActive,
       throttleDelayMs,
@@ -1672,6 +1723,7 @@ const PermissionsModal = memo(function PermissionsModal({
     noLogEnabled,
     allowAllConnections,
     selectedConnections,
+    selectedConnectionTags,
     autoResolveEnabled,
     keyIsActive,
     throttleDelayMs,
@@ -2589,7 +2641,50 @@ const PermissionsModal = memo(function PermissionsModal({
           </div>
         )}
 
+        {connectionTagOptions.length > 0 && (
+          <div className="flex flex-col gap-2 p-3 rounded-lg border border-border bg-surface/40">
+            <div className="flex items-center justify-between gap-2">
+              <div>
+                <p className="text-sm font-medium text-text-main">Allowed Connection Tags</p>
+                <p className="text-xs text-text-muted">
+                  {selectedConnectionTags.length === 0
+                    ? "No tag restriction."
+                    : `Restricted to accounts tagged ${selectedConnectionTags.join(", ")}.`}
+                </p>
+              </div>
+              {selectedConnectionTags.length > 0 && (
+                <button
+                  onClick={() => setSelectedConnectionTags([])}
+                  className="px-2 py-1 rounded text-xs font-medium text-text-muted hover:bg-black/5 dark:hover:bg-white/5 transition-all"
+                >
+                  Clear
+                </button>
+              )}
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {connectionTagOptions.map((tag) => {
+                const isSelected = selectedConnectionTags.includes(tag);
+                return (
+                  <button
+                    key={tag}
+                    type="button"
+                    onClick={() => handleToggleConnectionTag(tag)}
+                    className={`px-2.5 py-1 rounded-md text-xs font-medium border transition-all ${
+                      isSelected
+                        ? "bg-primary/10 text-primary border-primary/30"
+                        : "text-text-muted border-border hover:bg-surface/60 hover:text-text-main"
+                    }`}
+                  >
+                    {tag}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
         {/* Allowed Endpoints Section */}
+
         <div className="flex flex-col gap-2 p-3 rounded-lg border border-border bg-surface/40">
           <div className="flex items-center justify-between">
             <div className="flex flex-col gap-1">

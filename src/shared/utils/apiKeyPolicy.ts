@@ -66,6 +66,7 @@ export interface ApiKeyMetadata {
   allowedCombos?: string[];
   allowedConnections?: string[];
   allowedQuotas?: string[];
+  allowedConnectionTags?: string[];
   noLog?: boolean;
   autoResolve?: boolean;
   budget?: number;
@@ -497,9 +498,7 @@ export async function enforceApiKeyPolicy(
       const breach = checkTokenLimits(apiKeyInfo.id, undefined, modelStr ?? undefined);
       if (breach) {
         const scopeLabel =
-          breach.scopeType === "global"
-            ? "account"
-            : `${breach.scopeType} "${breach.scopeValue}"`;
+          breach.scopeType === "global" ? "account" : `${breach.scopeType} "${breach.scopeValue}"`;
         return {
           apiKey,
           apiKeyInfo,
@@ -516,10 +515,7 @@ export async function enforceApiKeyPolicy(
       return {
         apiKey,
         apiKeyInfo,
-        rejection: errorResponse(
-          HTTP_STATUS.SERVICE_UNAVAILABLE,
-          "Token limit policy unavailable"
-        ),
+        rejection: errorResponse(HTTP_STATUS.SERVICE_UNAVAILABLE, "Token limit policy unavailable"),
       };
     }
   }

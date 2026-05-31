@@ -147,6 +147,26 @@ function toNumberOrZero(value: unknown): number {
 
 // ──────────────── Provider Connections ────────────────
 
+export async function getActiveProviderConnectionRoutingTagRows(provider: string) {
+  const db = getDbInstance() as unknown as DbLike;
+  const rows = db
+    .prepare(
+      "SELECT id, provider_specific_data FROM provider_connections WHERE provider = @provider AND is_active = 1 ORDER BY priority ASC, updated_at DESC"
+    )
+    .all({ provider }) as Array<{ id?: unknown; provider_specific_data?: unknown }>;
+
+  return rows
+    .map((row) => ({
+      id: typeof row.id === "string" ? row.id : "",
+      providerSpecificData:
+        typeof row.provider_specific_data === "string" &&
+        row.provider_specific_data.trim().length > 0
+          ? row.provider_specific_data
+          : null,
+    }))
+    .filter((row) => row.id.length > 0);
+}
+
 export async function getProviderConnections(filter: JsonRecord = {}) {
   const db = getDbInstance() as unknown as DbLike;
   let sql = "SELECT * FROM provider_connections";

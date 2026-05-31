@@ -39,7 +39,7 @@ import {
   getCombos,
   getCombosCacheVersion,
   getSessionAccountAffinity,
-  getProviderConnections,
+  getActiveProviderConnectionRoutingTagRows,
 } from "@/lib/localDb";
 import {
   ensureOpenAIStoreSessionFallback,
@@ -181,7 +181,8 @@ async function resolveApiKeyAllowedConnectionIdsForProvider(
     allowedConnections?: string[] | null;
     allowedConnectionTags?: string[] | null;
   } | null,
-  targetAllowedConnectionIds: unknown
+  targetAllowedConnectionIds: unknown,
+  connectionTagCache?: Map<string, Promise<string[]>>
 ): Promise<string[] | null> {
   const explicitAllowed = intersectAllowedConnectionIds(
     apiKeyInfo?.allowedConnections ?? null,
@@ -194,17 +195,23 @@ async function resolveApiKeyAllowedConnectionIdsForProvider(
   }
 
   try {
-    const connections = await getProviderConnections({ provider, isActive: true });
     const tagSet = new Set(requestedTags);
-    const tagAllowedIds = (Array.isArray(connections) ? connections : [])
-      .filter((connection: Record<string, unknown>) => {
-        const connectionTags = getConnectionRoutingTags(connection.providerSpecificData);
-        return connectionTags.some((tag) => tagSet.has(tag));
-      })
-      .map((connection: Record<string, unknown>) =>
-        typeof connection.id === "string" ? connection.id : null
-      )
-      .filter((id): id is string => typeof id === "string" && id.trim().length > 0);
+    const cacheKey = `${provider}:${requestedTags.slice().sort().join(",")}`;
+    let tagAllowedPromise = connectionTagCache?.get(cacheKey);
+
+    if (!tagAllowedPromise) {
+      tagAllowedPromise = getActiveProviderConnectionRoutingTagRows(provider).then((connections) =>
+        connections
+          .filter((connection) => {
+            const connectionTags = getConnectionRoutingTags(connection.providerSpecificData);
+            return connectionTags.some((tag) => tagSet.has(tag));
+          })
+          .map((connection) => connection.id)
+      );
+      connectionTagCache?.set(cacheKey, tagAllowedPromise);
+    }
+
+    const tagAllowedIds = await tagAllowedPromise;
 
     if (explicitAllowed) {
       const tagAllowedSet = new Set(tagAllowedIds);
@@ -502,6 +509,7 @@ export async function handleChat(request: any, clientRawRequest: any = null) {
     // Pre-check function used by combo routing. For explicit combo live tests,
     // avoid pre-skipping so each model gets a real execution attempt.
     const comboPreselectedCredentials = new Map<string, any>();
+    const connectionTagCache = new Map<string, Promise<string[]>>();
     const getComboCredentialCacheKey = (
       modelString: string,
       target?: { connectionId?: string | null; executionKey?: string | null }
@@ -539,7 +547,8 @@ export async function handleChat(request: any, clientRawRequest: any = null) {
       let allowedConnections = await resolveApiKeyAllowedConnectionIdsForProvider(
         provider,
         apiKeyInfo,
-        target?.allowedConnectionIds ?? null
+        target?.allowedConnectionIds ?? null,
+        connectionTagCache
       );
 
       // A4: quota-exclusive keys must only use the pool's connection(s).
@@ -753,6 +762,7 @@ async function handleSingleModelChat(
     preselectedCredentials?: any;
     cachedSettings?: any;
     providerId?: string | null;
+    connectionTagCache?: Map<string, Promise<string[]>>;
   } = {},
   comboStrategy: string | null = null,
   isCombo: boolean = false
@@ -827,6 +837,7 @@ async function handleSingleModelChat(
     extendedContext,
     apiFormat,
   } = resolved;
+  const directConnectionTagCache = new Map<string, Promise<string[]>>();
   // Prefer the combo target's providerId when available — the model string's
   // provider prefix may differ from the credential provider ID (e.g. model
   // "xiaomi/mimo-v2-flash" resolves to provider "xiaomi" but the combo target
@@ -853,7 +864,8 @@ async function handleSingleModelChat(
   let effectiveAllowedConnections = await resolveApiKeyAllowedConnectionIdsForProvider(
     provider,
     apiKeyInfo,
-    runtimeOptions.allowedConnectionIds ?? null
+    runtimeOptions.allowedConnectionIds ?? null,
+    runtimeOptions.connectionTagCache ?? directConnectionTagCache
   );
 
   // A4: quota-exclusive keys must only use the pool's connection(s).

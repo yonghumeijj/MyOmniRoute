@@ -206,7 +206,13 @@ async function resolveApiKeyAllowedConnectionIdsForProvider(
       )
       .filter((id): id is string => typeof id === "string" && id.trim().length > 0);
 
-    return intersectAllowedConnectionIds(explicitAllowed, tagAllowedIds);
+    if (explicitAllowed) {
+      const tagAllowedSet = new Set(tagAllowedIds);
+      return explicitAllowed.filter((id) => tagAllowedSet.has(id));
+    }
+
+    // A configured tag restriction must fail closed when no account matches.
+    return tagAllowedIds;
   } catch (error) {
     log.warn(
       "AUTH",

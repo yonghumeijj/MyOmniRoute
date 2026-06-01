@@ -38,8 +38,10 @@ RUN --mount=type=cache,target=/root/.npm \
   && npm rebuild better-sqlite3 \
   && node -e "require('better-sqlite3')(':memory:').close()"
 
-# Use Turbopack for significant build speedup
-ENV OMNIROUTE_USE_TURBOPACK=1
+ARG OMNIROUTE_USE_TURBOPACK=1
+ARG OMNIROUTE_BUILD_MEMORY_MB=4096
+ENV OMNIROUTE_USE_TURBOPACK=${OMNIROUTE_USE_TURBOPACK}
+ENV NODE_OPTIONS=--max-old-space-size=${OMNIROUTE_BUILD_MEMORY_MB}
 
 COPY . ./
 RUN --mount=type=cache,target=/app/.next/cache \

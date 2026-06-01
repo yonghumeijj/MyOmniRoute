@@ -79,6 +79,17 @@ test("tag router normalizes request metadata and matches connection tags", () =>
   assert.equal(matchesRoutingTags(["cheap"], ["cheap", "fast"], "all"), false);
 });
 
+test("resolves provider aliases when loading API key tag-filter rows", async () => {
+  const codexFree = await seedConnection("codex", "codex-free", ["free"]);
+
+  const rows = await providersDb.getActiveProviderConnectionRoutingTagRows("cx");
+
+  assert.deepEqual(
+    rows.map((row: { id: string }) => row.id),
+    [codexFree.id]
+  );
+});
+
 test("handleComboChat filters priority targets by metadata.tags using any-match by default", async () => {
   const reliable = await seedConnection("openai", "reliable", ["reliable", "us-region"]);
   const cheap = await seedConnection("fireworks", "cheap", ["cheap", "fast"]);

@@ -74,6 +74,7 @@ test("tag router normalizes request metadata and matches connection tags", () =>
     "cheap",
     "eu-region",
   ]);
+  assert.deepEqual(getConnectionRoutingTags('{"tags":["Plus","Free"]}'), ["plus", "free"]);
   assert.equal(matchesRoutingTags(["cheap", "fast"], ["cheap"], "any"), true);
   assert.equal(matchesRoutingTags(["cheap"], ["cheap", "fast"], "all"), false);
 });

@@ -3,7 +3,22 @@ type JsonRecord = Record<string, unknown>;
 export type RoutingTagMatchMode = "any" | "all";
 
 function asRecord(value: unknown): JsonRecord {
-  return value && typeof value === "object" && !Array.isArray(value) ? (value as JsonRecord) : {};
+  if (value && typeof value === "object" && !Array.isArray(value)) {
+    return value as JsonRecord;
+  }
+
+  if (typeof value === "string" && value.trim().length > 0) {
+    try {
+      const parsed = JSON.parse(value);
+      return parsed && typeof parsed === "object" && !Array.isArray(parsed)
+        ? (parsed as JsonRecord)
+        : {};
+    } catch {
+      return {};
+    }
+  }
+
+  return {};
 }
 
 function normalizeSingleRoutingTag(value: unknown): string | null {

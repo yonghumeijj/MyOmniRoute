@@ -82,6 +82,7 @@ interface ApiKey {
   allowedCombos: string[] | null;
   allowedConnections: string[] | null;
   allowedConnectionTags?: string[] | null;
+  accountSelectionStrategy?: string | null;
   noLog?: boolean;
   autoResolve?: boolean;
   isActive?: boolean;
@@ -509,6 +510,7 @@ export default function ApiManagerPageClient() {
     noLog: boolean,
     allowedConnections: string[],
     allowedConnectionTags: string[],
+    accountSelectionStrategy: string | null,
     autoResolve: boolean,
     isActive: boolean,
     throttleDelayMs: number,
@@ -576,6 +578,7 @@ export default function ApiManagerPageClient() {
           allowedCombos: validCombos,
           allowedConnections: validConnections,
           allowedConnectionTags: validConnectionTags,
+          accountSelectionStrategy,
           noLog,
           autoResolve,
           isActive,
@@ -1313,6 +1316,8 @@ const PermissionsModal = memo(function PermissionsModal({
   const initialConnectionTags = Array.isArray(apiKey?.allowedConnectionTags)
     ? apiKey.allowedConnectionTags
     : [];
+  const initialAccountSelectionStrategy =
+    typeof apiKey?.accountSelectionStrategy === "string" ? apiKey.accountSelectionStrategy : null;
   const [keyName, setKeyName] = useState(apiKey?.name ?? "");
   const [selectedModels, setSelectedModels] = useState<string[]>(initialModels);
   const [selectedCombos, setSelectedCombos] = useState<string[]>(initialCombos);
@@ -1357,6 +1362,9 @@ const PermissionsModal = memo(function PermissionsModal({
   const [selectedConnections, setSelectedConnections] = useState<string[]>(initialConnections);
   const [selectedConnectionTags, setSelectedConnectionTags] =
     useState<string[]>(initialConnectionTags);
+  const [accountSelectionStrategy, setAccountSelectionStrategy] = useState<string>(
+    initialAccountSelectionStrategy ?? ""
+  );
   const [allowAllConnections, setAllowAllConnections] = useState(initialConnections.length === 0);
   const [expandedProviders, setExpandedProviders] = useState<Set<string>>(() => {
     // Expand all providers by default when in restrict mode with existing selections
@@ -1517,6 +1525,7 @@ const PermissionsModal = memo(function PermissionsModal({
       noLogEnabled,
       allowAllConnections ? [] : selectedConnections,
       selectedConnectionTags,
+      accountSelectionStrategy || null,
       autoResolveEnabled,
       keyIsActive,
       throttleDelayMs,
@@ -1543,6 +1552,7 @@ const PermissionsModal = memo(function PermissionsModal({
     allowAllConnections,
     selectedConnections,
     selectedConnectionTags,
+    accountSelectionStrategy,
     autoResolveEnabled,
     keyIsActive,
     throttleDelayMs,
@@ -2382,6 +2392,26 @@ const PermissionsModal = memo(function PermissionsModal({
             )}
           </div>
         )}
+
+        <div className="flex flex-col gap-2 p-3 rounded-lg border border-border bg-surface/40">
+          <div>
+            <p className="text-sm font-medium text-text-main">Account Selection Strategy</p>
+            <p className="text-xs text-text-muted">
+              Default uses the global account fallback strategy.
+            </p>
+          </div>
+          <select
+            value={accountSelectionStrategy}
+            onChange={(event) => setAccountSelectionStrategy(event.target.value)}
+            className="w-full px-3 py-2 bg-background border border-border rounded-md text-sm text-text-main focus:outline-none focus:ring-2 focus:ring-primary/30"
+          >
+            <option value="">Default</option>
+            <option value="round-robin">Round Robin</option>
+            <option value="fill-first">Fill First</option>
+            <option value="random">Random</option>
+            <option value="p2c">P2C</option>
+          </select>
+        </div>
 
         {connectionTagOptions.length > 0 && (
           <div className="flex flex-col gap-2 p-3 rounded-lg border border-border bg-surface/40">

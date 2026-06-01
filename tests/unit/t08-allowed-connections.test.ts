@@ -86,6 +86,27 @@ test("1.7 - allowedConnectionTags rejeita strings vazias", () => {
   assert.equal(result.success, false);
 });
 
+test("1.8 - accountSelectionStrategy aceita estrategias suportadas", () => {
+  for (const accountSelectionStrategy of ["fill-first", "round-robin", "random", "p2c"]) {
+    const result = schemas.validateBody(schemas.updateKeyPermissionsSchema, {
+      accountSelectionStrategy,
+    });
+    assert.equal(result.success, true);
+  }
+
+  const nullable = schemas.validateBody(schemas.updateKeyPermissionsSchema, {
+    accountSelectionStrategy: null,
+  });
+  assert.equal(nullable.success, true);
+});
+
+test("1.9 - accountSelectionStrategy rejeita estrategia desconhecida", () => {
+  const result = schemas.validateBody(schemas.updateKeyPermissionsSchema, {
+    accountSelectionStrategy: "least-used",
+  });
+  assert.equal(result.success, false);
+});
+
 // ══════════════════════════════════════════════════════════════════
 // Bloco 2 — DB (apiKeys.ts)
 // ══════════════════════════════════════════════════════════════════
@@ -158,6 +179,20 @@ test("2.6 - allowedConnectionTags persiste tags normalizadas", async () => {
 
   const meta = await apiKeysDb.getApiKeyMetadata(created.key);
   assert.deepEqual(meta?.allowedConnectionTags, ["plus", "free"]);
+});
+
+test("2.7 - accountSelectionStrategy persiste normalizado", async () => {
+  const created = await apiKeysDb.createApiKey("strategy-key", "machine-t08");
+
+  await apiKeysDb.updateApiKeyPermissions(created.id, {
+    accountSelectionStrategy: "ROUND-ROBIN",
+  });
+
+  const row = await apiKeysDb.getApiKeyById(created.id);
+  assert.equal(row?.accountSelectionStrategy, "round-robin");
+
+  const meta = await apiKeysDb.getApiKeyMetadata(created.key);
+  assert.equal(meta?.accountSelectionStrategy, "round-robin");
 });
 
 test("2.6 — cache é invalidado após update (2ª chamada ao metadata reflete novo valor)", async () => {

@@ -710,6 +710,7 @@ export const createComboSchema = z.object({
 // FASE-01: Removed .passthrough() — only explicitly listed fields are accepted
 
 const settingsFallbackStrategySchema = z.enum(ACCOUNT_FALLBACK_STRATEGY_VALUES);
+const apiKeyAccountSelectionStrategySchema = z.enum(["fill-first", "round-robin", "random", "p2c"]);
 
 export const updateSettingsSchema = z.object({
   newPassword: z.string().min(1).max(200).optional(),
@@ -1847,6 +1848,7 @@ export const updateKeyPermissionsSchema = z
     allowedCombos: z.array(z.string().trim().min(1).max(200)).max(500).optional(),
     allowedConnections: z.array(z.string().uuid()).max(100).optional(),
     allowedConnectionTags: z.array(z.string().trim().min(1).max(64)).max(200).optional(),
+    accountSelectionStrategy: apiKeyAccountSelectionStrategySchema.nullable().optional(),
     noLog: z.boolean().optional(),
     autoResolve: z.boolean().optional(),
     isActive: z.boolean().optional(),
@@ -1875,6 +1877,7 @@ export const updateKeyPermissionsSchema = z
       value.allowedCombos === undefined &&
       value.allowedConnections === undefined &&
       value.allowedConnectionTags === undefined &&
+      value.accountSelectionStrategy === undefined &&
       value.noLog === undefined &&
       value.autoResolve === undefined &&
       value.isActive === undefined &&

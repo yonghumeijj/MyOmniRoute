@@ -69,6 +69,7 @@ export async function PATCH(request, { params }) {
       allowedCombos,
       allowedConnections,
       allowedConnectionTags,
+      accountSelectionStrategy,
       noLog,
       autoResolve,
       isActive,
@@ -87,6 +88,9 @@ export async function PATCH(request, { params }) {
     if (allowedCombos !== undefined) payload.allowedCombos = allowedCombos;
     if (allowedConnections !== undefined) payload.allowedConnections = allowedConnections;
     if (allowedConnectionTags !== undefined) payload.allowedConnectionTags = allowedConnectionTags;
+    if (accountSelectionStrategy !== undefined) {
+      (payload as Record<string, unknown>).accountSelectionStrategy = accountSelectionStrategy;
+    }
     if (noLog !== undefined) payload.noLog = noLog;
     if (autoResolve !== undefined) payload.autoResolve = autoResolve;
     if (isActive !== undefined) payload.isActive = isActive;

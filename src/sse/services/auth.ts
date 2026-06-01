@@ -101,6 +101,7 @@ interface CredentialSelectionOptions {
   excludeConnectionIds?: string[] | null;
   sessionKey?: string | null;
   sessionAffinityTtlMs?: number | null;
+  accountSelectionStrategy?: string | null;
 }
 
 interface CooldownInspectionState {
@@ -1201,7 +1202,12 @@ export async function getProviderCredentials(
     const orderedConnections = withQuota;
 
     const settings = await getSettings();
-    const strategy = settings.fallbackStrategy || "fill-first";
+    const apiKeyStrategy =
+      typeof options.accountSelectionStrategy === "string" &&
+      options.accountSelectionStrategy.trim().length > 0
+        ? options.accountSelectionStrategy.trim().toLowerCase()
+        : null;
+    const strategy = apiKeyStrategy || settings.fallbackStrategy || "fill-first";
     const sessionAffinityTtlMs =
       provider === "codex"
         ? Number.isFinite(Number(options.sessionAffinityTtlMs)) &&
@@ -1500,8 +1506,8 @@ export async function getProviderCredentialsWithQuotaPreflight(
     // false for both "not set" and "explicit false" — we need an explicit check
     // here to distinguish them.
     const legacyForceDisable =
-      (credentials as { providerSpecificData?: Record<string, unknown> })
-        .providerSpecificData?.quotaPreflightEnabled === false;
+      (credentials as { providerSpecificData?: Record<string, unknown> }).providerSpecificData
+        ?.quotaPreflightEnabled === false;
     if (legacyForceDisable) return credentials;
 
     const hasConnectionOverrides = Object.keys(perConnectionWindowOverrides).length > 0;

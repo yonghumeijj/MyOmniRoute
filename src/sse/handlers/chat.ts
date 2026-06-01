@@ -164,6 +164,7 @@ async function resolveApiKeyAllowedConnectionIdsForProvider(
   apiKeyInfo: {
     allowedConnections?: string[] | null;
     allowedConnectionTags?: string[] | null;
+    accountSelectionStrategy?: string | null;
   } | null,
   targetAllowedConnectionIds: unknown,
   connectionTagCache?: Map<string, Promise<string[]>>
@@ -540,6 +541,10 @@ export async function handleChat(request: any, clientRawRequest: any = null) {
           sessionKey: sessionAffinityKey,
           ...(target?.allowRateLimitedConnection ? { allowRateLimitedConnections: true } : {}),
           ...(target?.connectionId ? { forcedConnectionId: target.connectionId } : {}),
+          ...(typeof apiKeyInfo?.accountSelectionStrategy === "string" &&
+          apiKeyInfo.accountSelectionStrategy.trim().length > 0
+            ? { accountSelectionStrategy: apiKeyInfo.accountSelectionStrategy.trim().toLowerCase() }
+            : {}),
         }
       );
       if (!creds || creds.allRateLimited) return false;
@@ -863,6 +868,11 @@ async function handleSingleModelChat(
   );
   const disableCooldownAwareRetry =
     isCombo || forceLiveComboTest || runtimeOptions.emergencyFallbackTried === true;
+  const effectiveAccountSelectionStrategy =
+    typeof apiKeyInfo?.accountSelectionStrategy === "string" &&
+    apiKeyInfo.accountSelectionStrategy.trim().length > 0
+      ? apiKeyInfo.accountSelectionStrategy.trim().toLowerCase()
+      : null;
   const retrySettings = disableCooldownAwareRetry
     ? {
         ...baseRetrySettings,
@@ -918,6 +928,9 @@ async function handleSingleModelChat(
                   : {}),
                 ...(runtimeOptions.forcedConnectionId
                   ? { forcedConnectionId: runtimeOptions.forcedConnectionId }
+                  : {}),
+                ...(effectiveAccountSelectionStrategy
+                  ? { accountSelectionStrategy: effectiveAccountSelectionStrategy }
                   : {}),
               }
             );

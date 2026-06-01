@@ -43,6 +43,7 @@ interface ApiKeyMetadata {
   allowedCombos: string[];
   allowedConnections: string[];
   allowedConnectionTags: string[];
+  accountSelectionStrategy: string | null;
   noLog: boolean;
   autoResolve: boolean;
   isActive: boolean;
@@ -77,6 +78,8 @@ interface ApiKeyRow extends JsonRecord {
   allowedConnections?: unknown;
   allowed_connection_tags?: unknown;
   allowedConnectionTags?: unknown;
+  account_selection_strategy?: unknown;
+  accountSelectionStrategy?: unknown;
   no_log?: unknown;
   noLog?: unknown;
   auto_resolve?: unknown;
@@ -115,6 +118,7 @@ interface ApiKeyView extends JsonRecord {
   allowedCombos: string[];
   allowedConnections: string[];
   allowedConnectionTags: string[];
+  accountSelectionStrategy: string | null;
   noLog: boolean;
   autoResolve: boolean;
   isActive: boolean;
@@ -144,6 +148,7 @@ const API_KEY_COLUMN_FALLBACKS = [
   { name: "no_log", definition: "no_log INTEGER NOT NULL DEFAULT 0" },
   { name: "allowed_connections", definition: "allowed_connections TEXT" },
   { name: "allowed_connection_tags", definition: "allowed_connection_tags TEXT" },
+  { name: "account_selection_strategy", definition: "account_selection_strategy TEXT" },
   { name: "auto_resolve", definition: "auto_resolve INTEGER NOT NULL DEFAULT 0" },
   { name: "is_active", definition: "is_active INTEGER NOT NULL DEFAULT 1" },
   { name: "access_schedule", definition: "access_schedule TEXT" },
@@ -360,7 +365,7 @@ function getPreparedStatements(db: ApiKeysDbLike): ApiKeysStatements {
       "SELECT id, expires_at, revoked_at, is_active, is_banned FROM api_keys WHERE key = ? OR key_hash = ?"
     );
     _stmtGetKeyMetadata = db.prepare<ApiKeyRow>(
-      "SELECT id, name, machine_id, allowed_models, allowed_combos, allowed_connections, allowed_connection_tags, no_log, auto_resolve, is_active, access_schedule, max_requests_per_day, max_requests_per_minute, throttle_delay_ms, max_sessions, revoked_at, expires_at, ip_allowlist, scopes, rate_limits, is_banned, key_hash, allowed_endpoints FROM api_keys WHERE key = ? OR key_hash = ?"
+      "SELECT id, name, machine_id, allowed_models, allowed_combos, allowed_connections, allowed_connection_tags, account_selection_strategy, no_log, auto_resolve, is_active, access_schedule, max_requests_per_day, max_requests_per_minute, throttle_delay_ms, max_sessions, revoked_at, expires_at, ip_allowlist, scopes, rate_limits, is_banned, key_hash, allowed_endpoints FROM api_keys WHERE key = ? OR key_hash = ?"
     );
     _stmtInsertKey = db.prepare(
       "INSERT INTO api_keys (id, name, key, machine_id, allowed_models, no_log, created_at, key_prefix, key_hash, scopes) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
@@ -399,6 +404,9 @@ export async function getApiKeys() {
     camelRow.allowedCombos = parseAllowedCombos(camelRow.allowedCombos);
     camelRow.allowedConnections = parseAllowedConnections(camelRow.allowedConnections);
     camelRow.allowedConnectionTags = parseAllowedConnectionTags(camelRow.allowedConnectionTags);
+    camelRow.accountSelectionStrategy = parseAccountSelectionStrategy(
+      (camelRow as JsonRecord).accountSelectionStrategy
+    );
     camelRow.noLog = parseNoLog(camelRow.noLog);
     camelRow.autoResolve = parseAutoResolve(camelRow.autoResolve);
     camelRow.isActive = parseIsActive(camelRow.isActive);
@@ -557,6 +565,19 @@ function parseAllowedConnectionTags(value: unknown): string[] {
   }
 }
 
+const API_KEY_ACCOUNT_SELECTION_STRATEGIES = new Set([
+  "fill-first",
+  "round-robin",
+  "random",
+  "p2c",
+]);
+
+function parseAccountSelectionStrategy(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const normalized = value.trim().toLowerCase();
+  return API_KEY_ACCOUNT_SELECTION_STRATEGIES.has(normalized) ? normalized : null;
+}
+
 function parseStringList(value: unknown): string[] {
   if (!value || typeof value !== "string" || value.trim() === "") return [];
   try {
@@ -675,6 +696,7 @@ export async function updateApiKeyPermissions(
         allowedCombos?: string[];
         allowedConnections?: string[];
         allowedConnectionTags?: string[];
+        accountSelectionStrategy?: string | null;
         noLog?: boolean;
         autoResolve?: boolean;
         isActive?: boolean;
@@ -703,6 +725,7 @@ export async function updateApiKeyPermissions(
           allowedCombos: update.allowedCombos,
           allowedConnections: update.allowedConnections,
           allowedConnectionTags: update.allowedConnectionTags,
+          accountSelectionStrategy: update.accountSelectionStrategy,
           noLog: update.noLog,
           autoResolve: update.autoResolve,
           isActive: update.isActive,
@@ -734,6 +757,7 @@ export async function updateApiKeyPermissions(
     normalized.rateLimits === undefined &&
     normalized.isBanned === undefined &&
     normalized.expiresAt === undefined &&
+    (normalized as Record<string, unknown>).accountSelectionStrategy === undefined &&
     (normalized as Record<string, unknown>).maxSessions === undefined &&
     (normalized as Record<string, unknown>).scopes === undefined &&
     (normalized as Record<string, unknown>).allowedEndpoints === undefined
@@ -749,6 +773,7 @@ export async function updateApiKeyPermissions(
     allowedCombos?: string;
     allowedConnections?: string;
     allowedConnectionTags?: string;
+    accountSelectionStrategy?: string | null;
     noLog?: number;
     autoResolve?: number;
     isActive?: number;
@@ -791,6 +816,13 @@ export async function updateApiKeyPermissions(
     updates.push("allowed_connection_tags = @allowedConnectionTags");
     params.allowedConnectionTags = JSON.stringify(
       parseAllowedConnectionTags(JSON.stringify(normalized.allowedConnectionTags || []))
+    );
+  }
+
+  if ((normalized as Record<string, unknown>).accountSelectionStrategy !== undefined) {
+    updates.push("account_selection_strategy = @accountSelectionStrategy");
+    params.accountSelectionStrategy = parseAccountSelectionStrategy(
+      (normalized as Record<string, unknown>).accountSelectionStrategy
     );
   }
 
@@ -1193,6 +1225,7 @@ export async function getApiKeyMetadata(
       allowedCombos: [],
       allowedConnections: [],
       allowedConnectionTags: [],
+      accountSelectionStrategy: null,
       noLog: false,
       autoResolve: true,
       isActive: true,
@@ -1248,6 +1281,9 @@ export async function getApiKeyMetadata(
     ),
     allowedConnectionTags: parseAllowedConnectionTags(
       record.allowed_connection_tags ?? record.allowedConnectionTags
+    ),
+    accountSelectionStrategy: parseAccountSelectionStrategy(
+      record.account_selection_strategy ?? record.accountSelectionStrategy
     ),
     noLog: parseNoLog(record.no_log ?? record.noLog),
     autoResolve: parseAutoResolve(record.auto_resolve ?? record.autoResolve),

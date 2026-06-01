@@ -33,6 +33,7 @@ export {
   // T13: Stale quota display fix (zero out usage after window resets)
   getEffectiveQuotaUsage,
   formatResetCountdown,
+  getActiveProviderConnectionRoutingTagRows,
 } from "./db/providers";
 
 export {

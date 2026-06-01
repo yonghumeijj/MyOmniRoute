@@ -26,6 +26,12 @@ interface CodexConnectionLike {
   expiresIn?: number | null;
   providerSpecificData?: JsonRecord | null;
 }
+interface OmniRouteAuthMetadata {
+  providerSpecificData?: {
+    tag?: string;
+    tags?: string[];
+  };
+}
 
 export interface CodexAuthFilePayload {
   auth_mode: "chatgpt";
@@ -37,6 +43,7 @@ export interface CodexAuthFilePayload {
     account_id: string;
   };
   last_refresh: string;
+  omniroute?: OmniRouteAuthMetadata;
 }
 
 export interface BuiltCodexAuthFile {
@@ -69,6 +76,30 @@ function toNonEmptyString(value: unknown): string | null {
   if (typeof value !== "string") return null;
   const trimmed = value.trim();
   return trimmed ? trimmed : null;
+}
+function normalizeRoutingTagList(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return Array.from(
+    new Set(
+      value.map((entry) => toNonEmptyString(entry)).filter((entry): entry is string => !!entry)
+    )
+  );
+}
+
+function buildOmniRouteAuthMetadata(
+  providerSpecificData: unknown
+): OmniRouteAuthMetadata | undefined {
+  const psd = toRecord(providerSpecificData);
+  const routingMetadata: NonNullable<OmniRouteAuthMetadata["providerSpecificData"]> = {};
+  const tag = toNonEmptyString(psd.tag);
+  const tags = normalizeRoutingTagList(psd.tags);
+
+  if (tag) routingMetadata.tag = tag;
+  if (tags.length > 0) routingMetadata.tags = tags;
+
+  return Object.keys(routingMetadata).length > 0
+    ? { providerSpecificData: routingMetadata }
+    : undefined;
 }
 
 function decodeJwtPayload(jwt: string): JsonRecord | null {
@@ -193,6 +224,7 @@ function buildCodexAuthPayload(connection: CodexConnectionLike): CodexAuthFilePa
       account_id: accountId,
     },
     last_refresh: new Date().toISOString(),
+    omniroute: buildOmniRouteAuthMetadata(connection.providerSpecificData),
   };
 }
 

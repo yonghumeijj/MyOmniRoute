@@ -16,6 +16,26 @@ function toNonEmptyString(value: unknown): string | null {
   const trimmed = value.trim();
   return trimmed ? trimmed : null;
 }
+function normalizeRoutingTagList(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return Array.from(
+    new Set(
+      value.map((entry) => toNonEmptyString(entry)).filter((entry): entry is string => !!entry)
+    )
+  );
+}
+
+function extractOmniRouteProviderSpecificData(raw: unknown): JsonRecord {
+  const metadata = toRecord(toRecord(raw).omniroute);
+  const psd = toRecord(metadata.providerSpecificData);
+  const result: JsonRecord = {};
+  const tag = toNonEmptyString(psd.tag);
+  const tags = normalizeRoutingTagList(psd.tags);
+
+  if (tag) result.tag = tag;
+  if (tags.length > 0) result.tags = tags;
+  return result;
+}
 
 // ──── Public types ────────────────────────────────────────────────────────────
 
@@ -27,6 +47,7 @@ export interface ParsedClaudeAuth {
   subscriptionType: string | null;
   rateLimitTier: string | null;
   email: string | null; // from bootstrap enrichment
+  providerSpecificData: JsonRecord;
 }
 
 export interface EnrichedClaudeAuth extends ParsedClaudeAuth {
@@ -203,6 +224,7 @@ export async function createConnectionFromAuthFile(
         testStatus: "active",
         providerSpecificData: {
           ...toRecord(existing.providerSpecificData),
+          ...enriched.providerSpecificData,
           accountUUID: enriched.accountUUID,
           organizationUUID: enriched.organizationUUID,
           organizationName: enriched.organizationName,
@@ -243,6 +265,7 @@ export async function createConnectionFromAuthFile(
     isActive: true,
     testStatus: "active",
     providerSpecificData: {
+      ...enriched.providerSpecificData,
       accountUUID: enriched.accountUUID,
       organizationUUID: enriched.organizationUUID,
       organizationName: enriched.organizationName,

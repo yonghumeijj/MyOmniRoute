@@ -26,6 +26,12 @@ interface GeminiConnectionLike {
   expiresIn?: number | null;
   providerSpecificData?: JsonRecord | null;
 }
+interface OmniRouteAuthMetadata {
+  providerSpecificData?: {
+    tag?: string;
+    tags?: string[];
+  };
+}
 
 export interface GeminiAuthFilePayload {
   access_token: string;
@@ -34,6 +40,7 @@ export interface GeminiAuthFilePayload {
   id_token: string;
   expiry_date: number;
   refresh_token: string;
+  omniroute?: OmniRouteAuthMetadata;
 }
 
 export interface BuiltGeminiAuthFile {
@@ -81,6 +88,30 @@ function toNonEmptyString(value: unknown): string | null {
   if (typeof value !== "string") return null;
   const trimmed = value.trim();
   return trimmed ? trimmed : null;
+}
+function normalizeRoutingTagList(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return Array.from(
+    new Set(
+      value.map((entry) => toNonEmptyString(entry)).filter((entry): entry is string => !!entry)
+    )
+  );
+}
+
+function buildOmniRouteAuthMetadata(
+  providerSpecificData: unknown
+): OmniRouteAuthMetadata | undefined {
+  const psd = toRecord(providerSpecificData);
+  const routingMetadata: NonNullable<OmniRouteAuthMetadata["providerSpecificData"]> = {};
+  const tag = toNonEmptyString(psd.tag);
+  const tags = normalizeRoutingTagList(psd.tags);
+
+  if (tag) routingMetadata.tag = tag;
+  if (tags.length > 0) routingMetadata.tags = tags;
+
+  return Object.keys(routingMetadata).length > 0
+    ? { providerSpecificData: routingMetadata }
+    : undefined;
 }
 
 function decodeJwtPayload(jwt: string): JsonRecord | null {
@@ -192,6 +223,7 @@ function buildGeminiAuthPayload(connection: GeminiConnectionLike): GeminiAuthFil
     id_token: idToken,
     expiry_date: expiryDate,
     refresh_token: refreshToken,
+    omniroute: buildOmniRouteAuthMetadata(connection.providerSpecificData),
   };
 }
 

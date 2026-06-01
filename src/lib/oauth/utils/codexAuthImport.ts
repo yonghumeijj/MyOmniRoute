@@ -16,6 +16,26 @@ function toNonEmptyString(value: unknown): string | null {
   const trimmed = value.trim();
   return trimmed ? trimmed : null;
 }
+function normalizeRoutingTagList(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return Array.from(
+    new Set(
+      value.map((entry) => toNonEmptyString(entry)).filter((entry): entry is string => !!entry)
+    )
+  );
+}
+
+function extractOmniRouteProviderSpecificData(raw: unknown): JsonRecord {
+  const metadata = toRecord(toRecord(raw).omniroute);
+  const psd = toRecord(metadata.providerSpecificData);
+  const result: JsonRecord = {};
+  const tag = toNonEmptyString(psd.tag);
+  const tags = normalizeRoutingTagList(psd.tags);
+
+  if (tag) result.tag = tag;
+  if (tags.length > 0) result.tags = tags;
+  return result;
+}
 
 function decodeJwtPayload(jwt: string): JsonRecord | null {
   try {
@@ -75,6 +95,7 @@ export interface ParsedCodexAuth {
   accountId: string;
   email: string | null;
   expiresAt: string | null;
+  providerSpecificData: JsonRecord;
 }
 
 export interface CreateConnectionOptions {
@@ -145,6 +166,7 @@ export function parseAndValidateCodexAuth(raw: unknown): ParsedCodexAuth {
     accountId,
     email: extractJwtEmail(idToken),
     expiresAt: extractExpiresAt(idToken),
+    providerSpecificData: extractOmniRouteProviderSpecificData(raw),
   };
 }
 
@@ -180,6 +202,7 @@ export async function createConnectionFromAuthFile(
       testStatus: "active",
       providerSpecificData: {
         ...toRecord(existing.providerSpecificData),
+        ...parsed.providerSpecificData,
         workspaceId: parsed.accountId,
         importedAt: new Date().toISOString(),
       },
@@ -202,6 +225,7 @@ export async function createConnectionFromAuthFile(
     isActive: true,
     testStatus: "active",
     providerSpecificData: {
+      ...parsed.providerSpecificData,
       workspaceId: parsed.accountId,
       importedAt: new Date().toISOString(),
     },

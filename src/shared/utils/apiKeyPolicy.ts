@@ -67,6 +67,7 @@ export interface ApiKeyMetadata {
   allowedConnections?: string[];
   allowedQuotas?: string[];
   allowedConnectionTags?: string[];
+  accountSelectionStrategy?: string | null;
   noLog?: boolean;
   autoResolve?: boolean;
   budget?: number;

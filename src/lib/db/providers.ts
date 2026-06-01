@@ -112,6 +112,24 @@ function toRecord(value: unknown): JsonRecord {
   return value && typeof value === "object" ? (value as JsonRecord) : {};
 }
 
+function parseJsonRecord(value: unknown): JsonRecord | null {
+  if (value && typeof value === "object" && !Array.isArray(value)) {
+    return value as JsonRecord;
+  }
+  if (typeof value !== "string" || value.trim().length === 0) {
+    return null;
+  }
+
+  try {
+    const parsed = JSON.parse(value);
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed)
+      ? (parsed as JsonRecord)
+      : null;
+  } catch {
+    return null;
+  }
+}
+
 // Sanitize the per-window threshold map: keep only 0-100 integer values.
 // Called once at each write-path boundary (createProviderConnection +
 // updateProviderConnection) so both the in-memory return and the persisted
@@ -158,11 +176,7 @@ export async function getActiveProviderConnectionRoutingTagRows(provider: string
   return rows
     .map((row) => ({
       id: typeof row.id === "string" ? row.id : "",
-      providerSpecificData:
-        typeof row.provider_specific_data === "string" &&
-        row.provider_specific_data.trim().length > 0
-          ? row.provider_specific_data
-          : null,
+      providerSpecificData: parseJsonRecord(row.provider_specific_data),
     }))
     .filter((row) => row.id.length > 0);
 }

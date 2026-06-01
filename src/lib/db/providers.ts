@@ -12,6 +12,7 @@ import {
 } from "./encryption";
 import { invalidateDbCache } from "./readCache";
 import { normalizeProviderSpecificData } from "@/lib/providers/requestDefaults";
+import { getProviderAlias, resolveProviderId } from "@/shared/constants/providers";
 
 type JsonRecord = Record<string, unknown>;
 
@@ -63,6 +64,20 @@ function withNullableQuotaWindowThresholds(
 
 function toRecord(value: unknown): JsonRecord {
   return value && typeof value === "object" ? (value as JsonRecord) : {};
+}
+
+function getProviderRoutingTagSearchPool(provider: string): string[] {
+  const canonicalProvider = resolveProviderId(provider);
+  const canonicalAlias = getProviderAlias(canonicalProvider);
+
+  if (provider === "nvidia") {
+    return ["nvidia", "nvidia_nim"];
+  }
+  if (provider === "nvidia_nim") {
+    return ["nvidia_nim", "nvidia"];
+  }
+
+  return Array.from(new Set([provider, canonicalProvider, canonicalAlias].filter(Boolean)));
 }
 
 function parseJsonRecord(value: unknown): JsonRecord | null {
@@ -120,11 +135,13 @@ function toNumberOrZero(value: unknown): number {
 
 export async function getActiveProviderConnectionRoutingTagRows(provider: string) {
   const db = getDbInstance() as unknown as DbLike;
+  const providers = getProviderRoutingTagSearchPool(provider);
+  const placeholders = providers.map(() => "?").join(", ");
   const rows = db
     .prepare(
-      "SELECT id, provider_specific_data FROM provider_connections WHERE provider = @provider AND is_active = 1 ORDER BY priority ASC, updated_at DESC"
+      `SELECT id, provider_specific_data FROM provider_connections WHERE provider IN (${placeholders}) AND is_active = 1 ORDER BY priority ASC, updated_at DESC`
     )
-    .all({ provider }) as Array<{ id?: unknown; provider_specific_data?: unknown }>;
+    .all(...providers) as Array<{ id?: unknown; provider_specific_data?: unknown }>;
 
   return rows
     .map((row) => ({

@@ -175,6 +175,14 @@ function intersectAllowedConnectionIds(primary: unknown, secondary: unknown): st
   return first || second || null;
 }
 
+function formatConnectionIdPreview(ids: string[]): string {
+  if (ids.length === 0) return "none";
+  const preview = ids.slice(0, 8).map((id) => id.slice(0, 8));
+  return ids.length > preview.length
+    ? `${preview.join(",")}...(+${ids.length - preview.length})`
+    : preview.join(",");
+}
+
 async function resolveApiKeyAllowedConnectionIdsForProvider(
   provider: string,
   apiKeyInfo: {
@@ -196,28 +204,61 @@ async function resolveApiKeyAllowedConnectionIdsForProvider(
   }
 
   try {
+    const explicitScope = Array.isArray(explicitAllowed) ? `${explicitAllowed.length}` : "all";
     const tagSet = new Set(requestedTags);
     const cacheKey = `${provider}:${requestedTags.slice().sort().join(",")}`;
     let tagAllowedPromise = connectionTagCache?.get(cacheKey);
 
+    log.info(
+      "AUTH",
+      `API key tag filter start provider=${provider} tags=[${requestedTags.join(",")}] baseConnections=${explicitScope}`
+    );
+
     if (!tagAllowedPromise) {
-      tagAllowedPromise = getActiveProviderConnectionRoutingTagRows(provider).then((connections) =>
-        connections
-          .filter((connection) => {
-            const connectionTags = getConnectionRoutingTags(connection.providerSpecificData);
-            return connectionTags.some((tag) => tagSet.has(tag));
-          })
-          .map((connection) => connection.id)
+      tagAllowedPromise = getActiveProviderConnectionRoutingTagRows(provider).then(
+        (connections) => {
+          const matchedIds = connections
+            .filter((connection) => {
+              const connectionTags = getConnectionRoutingTags(connection.providerSpecificData);
+              return connectionTags.some((tag) => tagSet.has(tag));
+            })
+            .map((connection) => connection.id);
+
+          const level = matchedIds.length > 0 ? log.info : log.warn;
+          level(
+            "AUTH",
+            `API key tag filter candidates provider=${provider} tags=[${requestedTags.join(",")}] candidates=${connections.length} matched=${matchedIds.length} matchedIds=${formatConnectionIdPreview(matchedIds)}`
+          );
+
+          return matchedIds;
+        }
       );
       connectionTagCache?.set(cacheKey, tagAllowedPromise);
+    } else {
+      log.debug(
+        "AUTH",
+        `API key tag filter cache hit provider=${provider} tags=[${requestedTags.join(",")}]`
+      );
     }
 
     const tagAllowedIds = await tagAllowedPromise;
 
     if (explicitAllowed) {
       const tagAllowedSet = new Set(tagAllowedIds);
-      return explicitAllowed.filter((id) => tagAllowedSet.has(id));
+      const filteredIds = explicitAllowed.filter((id) => tagAllowedSet.has(id));
+      const level = filteredIds.length > 0 ? log.info : log.warn;
+      level(
+        "AUTH",
+        `API key tag filter final provider=${provider} tags=[${requestedTags.join(",")}] tagMatched=${tagAllowedIds.length} explicit=${explicitAllowed.length} final=${filteredIds.length} finalIds=${formatConnectionIdPreview(filteredIds)}`
+      );
+      return filteredIds;
     }
+
+    const level = tagAllowedIds.length > 0 ? log.info : log.warn;
+    level(
+      "AUTH",
+      `API key tag filter final provider=${provider} tags=[${requestedTags.join(",")}] final=${tagAllowedIds.length} finalIds=${formatConnectionIdPreview(tagAllowedIds)}`
+    );
 
     // A configured tag restriction must fail closed when no account matches.
     return tagAllowedIds;
@@ -229,7 +270,6 @@ async function resolveApiKeyAllowedConnectionIdsForProvider(
     return [];
   }
 }
-
 const PROVIDER_BREAKER_FAILURE_STATUSES = new Set([408, 500, 502, 503, 504]);
 
 /**

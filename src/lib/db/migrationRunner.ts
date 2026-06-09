@@ -506,6 +506,14 @@ function isSchemaAlreadyApplied(
       // was dropped on integration; this canonical migration creates the table
       // that recordPluginExecution()/getPluginAnalytics() rely on.
       return hasTable(db, "plugin_analytics");
+    case "097":
+      // MyOmniRoute API-key connection tags migration, renumbered from 077
+      // after upstream added 077_api_key_stream_default_mode.
+      return hasColumn(db, "api_keys", "allowed_connection_tags");
+    case "098":
+      // MyOmniRoute API-key account selection strategy migration, renumbered
+      // from 078 after upstream added 078_quota_consumption.
+      return hasColumn(db, "api_keys", "account_selection_strategy");
     default:
       return false;
   }

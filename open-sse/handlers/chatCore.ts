@@ -4749,6 +4749,16 @@ export async function handleChatCore({
           console.warn(
             `[provider] Node ${connectionId} OAuth token invalid (${statusCode}) — token refresh available`
           );
+        } else if (errorType === PROVIDER_ERROR_TYPES.UPSTREAM_ACCESS_BLOCKED) {
+          // OpenAI/Cloudflare VPN or IP block is an environment/network issue, not an account ban.
+          await updateProviderConnection(connectionId, {
+            lastErrorType: errorType,
+            lastError: message,
+            errorCode: statusCode,
+          });
+          console.warn(
+            `[provider] Node ${connectionId} upstream access blocked (${statusCode}) — not banning`
+          );
         } else if (errorType === PROVIDER_ERROR_TYPES.PROJECT_ROUTE_ERROR) {
           // Cloud Code 403 with stale project: not a ban, keep account active.
           await updateProviderConnection(connectionId, {

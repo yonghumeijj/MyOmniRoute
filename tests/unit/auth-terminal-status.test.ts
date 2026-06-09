@@ -272,3 +272,32 @@ test("markAccountUnavailable keeps oauth-invalid 401 errors non-terminal", async
   assert.equal(after.lastErrorType, "oauth_invalid_token");
   assert.ok(!after.rateLimitedUntil);
 });
+test("markAccountUnavailable keeps OpenAI VPN/IP-block 403 non-terminal", async () => {
+  await resetStorage();
+
+  const conn = await providersDb.createProviderConnection({
+    provider: "codex",
+    authType: "oauth",
+    accessToken: "oauth-access-token",
+    refreshToken: "oauth-refresh-token",
+    email: "vpn-block@example.com",
+    isActive: true,
+    testStatus: "active",
+  });
+
+  const result = await auth.markAccountUnavailable(
+    (conn as any).id,
+    403,
+    "Unable to load site. If you are using a VPN, try turning it off. Ray ID:a074de5e78e80719",
+    "codex",
+    "gpt-5.5"
+  );
+  const after = await providersDb.getProviderConnectionById((conn as any).id);
+
+  assert.equal(result.shouldFallback, true);
+  assert.equal(result.cooldownMs, 0);
+  assert.equal(after.testStatus, "active");
+  assert.equal(after.isActive, true);
+  assert.equal(after.lastErrorType, "upstream_access_blocked");
+  assert.ok(!after.rateLimitedUntil);
+});

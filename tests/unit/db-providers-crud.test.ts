@@ -9,6 +9,19 @@ process.env.DATA_DIR = TEST_DATA_DIR;
 
 const core = await import("../../src/lib/db/core.ts");
 const providersDb = await import("../../src/lib/db/providers.ts");
+const codexImport = await import("../../src/lib/oauth/utils/codexAuthImport.ts");
+
+function buildParsedCodexAuth(accountId: string, email: string | null, tokenPrefix: string) {
+  return {
+    idToken: `${tokenPrefix}-id-token`,
+    accessToken: `${tokenPrefix}-access-token`,
+    refreshToken: `${tokenPrefix}-refresh-token`,
+    accountId,
+    email,
+    expiresAt: null,
+    providerSpecificData: {},
+  };
+}
 
 async function resetStorage() {
   core.resetDbInstance();
@@ -140,6 +153,83 @@ test("codex workspace uniqueness uses workspaceId alongside email", async () => 
     "ws-a",
     "ws-b",
   ]);
+});
+
+test("codex auth import duplicate check uses workspaceId plus email", async () => {
+  const first = await codexImport.createConnectionFromAuthFile(
+    buildParsedCodexAuth("ws-shared", "alice@example.com", "alice"),
+    {}
+  );
+  const second = await codexImport.createConnectionFromAuthFile(
+    buildParsedCodexAuth("ws-shared", "bob@example.com", "bob"),
+    {}
+  );
+
+  assert.equal(first.created, true);
+  assert.equal(second.created, true);
+
+  await assert.rejects(
+    () =>
+      codexImport.createConnectionFromAuthFile(
+        buildParsedCodexAuth("ws-shared", "alice@example.com", "alice-new"),
+        {}
+      ),
+    (error: any) => {
+      assert.equal(error.code, "duplicate_account");
+      return true;
+    }
+  );
+
+  const rows = await providersDb.getProviderConnections({ provider: "codex" });
+  assert.equal(rows.length, 2);
+  assert.deepEqual(rows.map((row) => row.email).sort(), ["alice@example.com", "bob@example.com"]);
+});
+
+test("codex auth import treats old same-workspace rows without email as duplicates", async () => {
+  await providersDb.createProviderConnection({
+    provider: "codex",
+    authType: "oauth",
+    providerSpecificData: { workspaceId: "ws-old" },
+  });
+
+  await assert.rejects(
+    () =>
+      codexImport.createConnectionFromAuthFile(
+        buildParsedCodexAuth("ws-old", "alice@example.com", "alice"),
+        {}
+      ),
+    (error: any) => {
+      assert.equal(error.code, "duplicate_account");
+      return true;
+    }
+  );
+
+  const rows = await providersDb.getProviderConnections({ provider: "codex" });
+  assert.equal(rows.length, 1);
+});
+
+test("codex auth import without email fails closed on same workspace", async () => {
+  await providersDb.createProviderConnection({
+    provider: "codex",
+    authType: "oauth",
+    email: "alice@example.com",
+    providerSpecificData: { workspaceId: "ws-email-missing" },
+  });
+
+  await assert.rejects(
+    () =>
+      codexImport.createConnectionFromAuthFile(
+        buildParsedCodexAuth("ws-email-missing", null, "no-email"),
+        {}
+      ),
+    (error: any) => {
+      assert.equal(error.code, "duplicate_account");
+      return true;
+    }
+  );
+
+  const rows = await providersDb.getProviderConnections({ provider: "codex" });
+  assert.equal(rows.length, 1);
 });
 
 test("updateProviderConnection reorders priorities and returns decrypted payloads", async () => {

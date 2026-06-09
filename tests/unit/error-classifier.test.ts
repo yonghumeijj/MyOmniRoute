@@ -120,3 +120,15 @@ test("classifyProviderError: OAuth provider 429 with daily quota signal => QUOTA
   );
   assert.equal(result, PROVIDER_ERROR_TYPES.QUOTA_EXHAUSTED);
 });
+test("classifyProviderError: OpenAI Cloudflare/VPN 403 => UPSTREAM_ACCESS_BLOCKED", () => {
+  const body = `
+    <html>
+      <p>Unable to load site</p>
+      <span>If you are using a VPN, try turning it off.</span>
+      <span>[IP:210.16.123.120 | Ray ID:a074de5e78e80719]</span>
+      <script src="/cdn-cgi/challenge-platform/scripts/jsd/main.js"></script>
+    </html>
+  `;
+  const result = classifyProviderError(403, body, "codex");
+  assert.equal(result, PROVIDER_ERROR_TYPES.UPSTREAM_ACCESS_BLOCKED);
+});

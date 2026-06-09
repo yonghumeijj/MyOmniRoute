@@ -405,7 +405,8 @@ function resolveTerminalConnectionStatus(
   if (result.creditsExhausted || status === 402) return "credits_exhausted";
   if (
     providerErrorType === PROVIDER_ERROR_TYPES.PROJECT_ROUTE_ERROR ||
-    providerErrorType === PROVIDER_ERROR_TYPES.OAUTH_INVALID_TOKEN
+    providerErrorType === PROVIDER_ERROR_TYPES.OAUTH_INVALID_TOKEN ||
+    providerErrorType === PROVIDER_ERROR_TYPES.UPSTREAM_ACCESS_BLOCKED
   ) {
     return null;
   }

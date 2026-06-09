@@ -1512,8 +1512,7 @@ export async function handleChatCore({
       comboName: comboName || undefined,
     });
   });
-  const traceEnabled =
-    process.env.OMNIRROUTE_TRACE === "true" || process.env.DEBUG === "true";
+  const traceEnabled = process.env.OMNIRROUTE_TRACE === "true" || process.env.DEBUG === "true";
   const trace = (label: string, extra?: Record<string, unknown>) => {
     if (!traceEnabled) return;
     const elapsed = Date.now() - startTime;
@@ -1686,10 +1685,7 @@ export async function handleChatCore({
     }
   };
 
-  const persistCodexQuotaState = async (
-    headers: Record<string, string> | null,
-    status = 0
-  ) => {
+  const persistCodexQuotaState = async (headers: Record<string, string> | null, status = 0) => {
     if (provider !== "codex" || !connectionId || !headers) return;
 
     try {
@@ -3432,14 +3428,19 @@ export async function handleChatCore({
     let fallbackCodes: number[] = [429, 500, 502, 503, 504];
     try {
       const allSettings = await getCachedSettings();
-      if (typeof allSettings.cliproxyapi_fallback_codes === "string" && allSettings.cliproxyapi_fallback_codes.trim()) {
+      if (
+        typeof allSettings.cliproxyapi_fallback_codes === "string" &&
+        allSettings.cliproxyapi_fallback_codes.trim()
+      ) {
         const parsed = allSettings.cliproxyapi_fallback_codes
           .split(",")
           .map((s: string) => parseInt(s.trim(), 10))
           .filter((n: number) => !isNaN(n));
         if (parsed.length > 0) fallbackCodes = parsed;
       }
-    } catch { /* use defaults */ }
+    } catch {
+      /* use defaults */
+    }
     const isRetryableStatus = (s: number) => fallbackCodes.includes(s) || s === 0;
 
     const wrapper = Object.create(nativeExec);
@@ -3983,7 +3984,11 @@ export async function handleChatCore({
   // ── Tier 2: Authoritative per-model/provider token-limit check (provider now resolved) ──
   if (apiKeyInfo?.id) {
     try {
-      const tokenBreach = checkTokenLimits(apiKeyInfo.id, provider || undefined, model || undefined);
+      const tokenBreach = checkTokenLimits(
+        apiKeyInfo.id,
+        provider || undefined,
+        model || undefined
+      );
       if (tokenBreach) {
         const scopeLabel =
           tokenBreach.scopeType === "global"
@@ -4426,6 +4431,16 @@ export async function handleChatCore({
           });
           console.warn(
             `[provider] Node ${connectionId} OAuth token invalid (${statusCode}) — token refresh available`
+          );
+        } else if (errorType === PROVIDER_ERROR_TYPES.UPSTREAM_ACCESS_BLOCKED) {
+          // OpenAI/Cloudflare VPN or IP block is an environment/network issue, not an account ban.
+          await updateProviderConnection(connectionId, {
+            lastErrorType: errorType,
+            lastError: message,
+            errorCode: statusCode,
+          });
+          console.warn(
+            `[provider] Node ${connectionId} upstream access blocked (${statusCode}) — not banning`
           );
         } else if (errorType === PROVIDER_ERROR_TYPES.PROJECT_ROUTE_ERROR) {
           // Cloud Code 403 with stale project: not a ban, keep account active.
@@ -4949,7 +4964,8 @@ export async function handleChatCore({
       if (apiKeyInfo?.id) {
         try {
           const billable = computeBillableTokens(usage);
-          if (billable > 0) recordTokenUsage(apiKeyInfo.id, provider || "unknown", model || "unknown", billable);
+          if (billable > 0)
+            recordTokenUsage(apiKeyInfo.id, provider || "unknown", model || "unknown", billable);
         } catch {
           // never block the response on counter recording
         }
@@ -5338,7 +5354,8 @@ export async function handleChatCore({
       if (apiKeyInfo?.id && streamStatus === 200) {
         try {
           const billable = computeBillableTokens(streamUsage);
-          if (billable > 0) recordTokenUsage(apiKeyInfo.id, provider || "unknown", model || "unknown", billable);
+          if (billable > 0)
+            recordTokenUsage(apiKeyInfo.id, provider || "unknown", model || "unknown", billable);
         } catch {
           // never block the stream on counter recording
         }

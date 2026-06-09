@@ -52,6 +52,7 @@ export const PROVIDER_ERROR_TYPES = {
   UNAUTHORIZED: "unauthorized",
   ACCOUNT_DEACTIVATED: "account_deactivated",
   FORBIDDEN: "forbidden",
+  UPSTREAM_ACCESS_BLOCKED: "upstream_access_blocked",
   SERVER_ERROR: "server_error",
   QUOTA_EXHAUSTED: "quota_exhausted",
   PROJECT_ROUTE_ERROR: "project_route_error",
@@ -78,6 +79,18 @@ export const CONTEXT_OVERFLOW_REGEX = new RegExp(CONTEXT_OVERFLOW_SIGNALS.join("
 
 export function isContextOverflow(errorText: string): boolean {
   return CONTEXT_OVERFLOW_REGEX.test(String(errorText || ""));
+}
+
+export function isUpstreamAccessBlocked(errorText: string): boolean {
+  const lower = String(errorText || "").toLowerCase();
+  if (!lower) return false;
+
+  return (
+    (lower.includes("unable to load site") && lower.includes("ray id")) ||
+    (lower.includes("if you are using a vpn") && lower.includes("ray id")) ||
+    (lower.includes("/cdn-cgi/challenge-platform") && lower.includes("ray id")) ||
+    (lower.includes("__cf$cv$params") && lower.includes("ray id"))
+  );
 }
 
 function responseBodyToString(responseBody: unknown): string {
@@ -140,6 +153,9 @@ export function classifyProviderError(
     return PROVIDER_ERROR_TYPES.ACCOUNT_DEACTIVATED;
   }
   if (statusCode === 403) {
+    if (isUpstreamAccessBlocked(bodyStr)) {
+      return PROVIDER_ERROR_TYPES.UPSTREAM_ACCESS_BLOCKED;
+    }
     if (bodyStr.includes("has not been used in project")) {
       return PROVIDER_ERROR_TYPES.PROJECT_ROUTE_ERROR;
     }

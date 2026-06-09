@@ -176,7 +176,8 @@ export async function createConnectionFromAuthFile(
   parsed: ParsedCodexAuth,
   options: CreateConnectionOptions
 ): Promise<{ connection: JsonRecord; created: boolean }> {
-  const existing = await findExistingCodexConnection(parsed.accountId);
+  const resolvedEmail = toNonEmptyString(options.email) || parsed.email;
+  const existing = await findExistingCodexConnection(parsed.accountId, resolvedEmail);
 
   if (existing) {
     if (!options.overwriteExisting) {
@@ -192,12 +193,11 @@ export async function createConnectionFromAuthFile(
       refreshToken: parsed.refreshToken,
       idToken: parsed.idToken,
       expiresAt: parsed.expiresAt,
-      email: options.email || parsed.email || (existing.email as string | undefined),
+      email: resolvedEmail || (existing.email as string | undefined),
       name:
         options.name ||
         (existing.name as string | undefined) ||
-        options.email ||
-        parsed.email ||
+        resolvedEmail ||
         "Codex (imported)",
       testStatus: "active",
       providerSpecificData: {
@@ -211,13 +211,13 @@ export async function createConnectionFromAuthFile(
     return { connection: updated || existing, created: false };
   }
 
-  const name = options.name || options.email || parsed.email || "Codex (imported)";
+  const name = options.name || resolvedEmail || "Codex (imported)";
 
   const connection = await createProviderConnection({
     provider: "codex",
     authType: "oauth",
     name,
-    email: options.email || parsed.email || undefined,
+    email: resolvedEmail || undefined,
     accessToken: parsed.accessToken,
     refreshToken: parsed.refreshToken,
     idToken: parsed.idToken,
@@ -253,12 +253,24 @@ export async function createConnectionFromAuthFile(
   return { connection, created: true };
 }
 
-async function findExistingCodexConnection(accountId: string): Promise<JsonRecord | null> {
+async function findExistingCodexConnection(
+  accountId: string,
+  email: string | null
+): Promise<JsonRecord | null> {
   const connections = await getProviderConnections({ provider: "codex" });
+  const lowerEmail = email?.toLowerCase() ?? null;
   return (
     (connections.find((c) => {
+      const conn = c as JsonRecord;
       const psd = toRecord((c as JsonRecord).providerSpecificData);
-      return toNonEmptyString(psd.workspaceId) === accountId;
+      if (toNonEmptyString(psd.workspaceId) !== accountId) return false;
+
+      const storedEmail = toNonEmptyString(conn.email);
+      if (lowerEmail) {
+        return storedEmail ? storedEmail.toLowerCase() === lowerEmail : true;
+      }
+
+      return true;
     }) as JsonRecord | undefined) ?? null
   );
 }

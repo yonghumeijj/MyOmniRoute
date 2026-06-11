@@ -53,17 +53,20 @@ export async function POST(_request: Request, { params }: { params: Promise<{ id
     // the serializer only prevents concurrent sibling refreshes.
     const rotationGroup = rotationGroupFor(provider);
     if (rotationGroup === "openai-auth0") {
-      return NextResponse.json({
-        success: true,
-        skipped: true,
-        connectionId: id,
-        provider,
-        message:
-          "Rotating-refresh provider: the token refreshes automatically on the next request. " +
-          "Manual/bulk refresh is intentionally skipped to avoid Auth0 token-family revocation.",
-        expiresAt: connection.tokenExpiresAt || connection.expiresAt || null,
-        refreshedAt: new Date().toISOString(),
-      });
+      return NextResponse.json(
+        {
+          success: false,
+          skipped: true,
+          connectionId: id,
+          provider,
+          error:
+            "Manual token refresh is disabled for Codex/OpenAI rotating-refresh accounts. " +
+            "OmniRoute did not refresh this token. Send a request to let the serialized " +
+            "reactive refresh path run, or re-authenticate this account if the refresh token is invalid.",
+          expiresAt: connection.tokenExpiresAt || connection.expiresAt || null,
+        },
+        { status: 409 }
+      );
     }
 
     const credentials = {

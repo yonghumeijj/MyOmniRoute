@@ -56,6 +56,17 @@ test("manual refresh route skips proactive refresh for the OpenAI Auth0 family B
     /return\b/,
     "the OpenAI Auth0 guard must return early (defer to the reactive 401 path) instead of refreshing"
   );
+  assert.match(
+    guardBlock,
+    /success:\s*false/,
+    "skipping manual refresh must not be reported as a successful refresh"
+  );
+  assert.match(guardBlock, /skipped:\s*true/, "skipped manual refresh responses must stay explicit");
+  assert.match(
+    guardBlock,
+    /\{\s*status:\s*409\s*\}/,
+    "manual refresh skip should use a non-2xx status so the dashboard does not show success"
+  );
 });
 
 test("manual refresh route does not skip Kiro just because it is serialized", async () => {

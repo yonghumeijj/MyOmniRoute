@@ -108,7 +108,10 @@ import {
   getModelUpstreamExtraHeaders,
   getUpstreamProxyConfig,
 } from "@/lib/localDb";
-import { getProviderCredentials, extractSessionAffinityKey } from "@/sse/services/auth";
+import {
+  getProviderCredentialsWithQuotaPreflight,
+  extractSessionAffinityKey,
+} from "@/sse/services/auth";
 import { deleteSessionAccountAffinity } from "@/lib/db/sessionAccountAffinity";
 import { getExecutor } from "../executors/index.ts";
 import { getCacheControlSettings } from "@/lib/cacheControlSettings";
@@ -1374,6 +1377,7 @@ function attachLogMeta(
  * @param {function} options.onDisconnect - Callback when client disconnects
  * @param {string} options.connectionId - Connection ID for usage tracking
  * @param {object} options.apiKeyInfo - API key metadata for usage attribution
+ * @param {string[]|null} options.allowedConnectionIds - Resolved API key connection pool
  * @param {string} options.userAgent - Client user agent for caching decisions
  * @param {string} options.comboName - Combo name if this is a combo request
  * @param {string} options.comboStrategy - Combo routing strategy (e.g., 'priority', 'cost-optimized')
@@ -1542,6 +1546,7 @@ export async function handleChatCore({
   clientRawRequest,
   connectionId,
   apiKeyInfo = null,
+  allowedConnectionIds = null,
   userAgent,
   comboName,
   comboStrategy = null,
@@ -1554,6 +1559,16 @@ export async function handleChatCore({
   createPiiTransform = null,
 }) {
   let { provider, model, extendedContext } = modelInfo;
+  const retryAllowedConnectionIds = Array.isArray(allowedConnectionIds)
+    ? allowedConnectionIds
+        .filter((id) => typeof id === "string" && id.trim().length > 0)
+        .map((id) => id.trim())
+    : null;
+  const retryAccountSelectionStrategy =
+    typeof apiKeyInfo?.accountSelectionStrategy === "string" &&
+    apiKeyInfo.accountSelectionStrategy.trim().length > 0
+      ? apiKeyInfo.accountSelectionStrategy.trim().toLowerCase()
+      : null;
   // ── Memory pressure guard ────────────────────────────────────────────
   // Reject early if V8 heap is already near the 256MB limit. Prevents
   // cascading OOM when many large-context requests arrive concurrently.
@@ -1795,6 +1810,42 @@ export async function handleChatCore({
         });
       }
     }
+  };
+
+  const markConnectionExpiredForAuthFailure = async (
+    reason: string,
+    statusCode = HTTP_STATUS.UNAUTHORIZED,
+    errorType = PROVIDER_ERROR_TYPES.UNAUTHORIZED
+  ): Promise<void> => {
+    if (credentials && typeof credentials === "object") {
+      (credentials as Record<string, unknown>).isActive = false;
+      (credentials as Record<string, unknown>).testStatus = "expired";
+    }
+
+    if (typeof connectionId !== "string" || !connectionId) {
+      if (onCredentialsRefreshed) {
+        await onCredentialsRefreshed({ testStatus: "expired", isActive: false });
+      }
+      return;
+    }
+
+    const failedAt = new Date().toISOString();
+    await updateProviderConnection(connectionId, {
+      isActive: false,
+      testStatus: "expired",
+      lastErrorType: errorType,
+      lastError: reason,
+      errorCode: statusCode,
+      lastErrorAt: failedAt,
+      lastTested: failedAt,
+    }).catch((err: unknown) => {
+      log?.error?.(
+        "DB",
+        `Failed to mark connection expired after auth failure: ${
+          err instanceof Error ? err.message : String(err)
+        }`
+      );
+    });
   };
 
   const persistCodexQuotaState = async (headers: Record<string, string> | null, status = 0) => {
@@ -4098,10 +4149,30 @@ export async function handleChatCore({
                   }
                 }
 
-                // Fetch next available codex connection (excluding all previously failed ones)
-                const nextCreds = await getProviderCredentials("codex", null, null, null, {
-                  excludeConnectionIds: [...codexExcludedIds],
-                }).catch(() => null);
+                if (
+                  Array.isArray(retryAllowedConnectionIds) &&
+                  retryAllowedConnectionIds.length === 0
+                ) {
+                  log?.warn?.(
+                    "CODEX_FAILOVER",
+                    "No codex accounts available in API key allowed pool — returning 429"
+                  );
+                  return res;
+                }
+
+                // Fetch next available codex connection from the same API-key constrained pool.
+                const nextCreds = await getProviderCredentialsWithQuotaPreflight(
+                  "codex",
+                  null,
+                  retryAllowedConnectionIds,
+                  modelToCall,
+                  {
+                    excludeConnectionIds: [...codexExcludedIds],
+                    ...(retryAccountSelectionStrategy
+                      ? { accountSelectionStrategy: retryAccountSelectionStrategy }
+                      : {}),
+                  }
+                ).catch(() => null);
 
                 if (!nextCreds || nextCreds.allRateLimited) {
                   log?.warn?.("CODEX_FAILOVER", "No more codex accounts available — returning 429");
@@ -4559,6 +4630,15 @@ export async function handleChatCore({
           upstreamErrorParsed = false; // Reset since new response is OK
         } else {
           providerResponse = retryResult.response;
+          if (retryResult.response.status === HTTP_STATUS.UNAUTHORIZED) {
+            await markConnectionExpiredForAuthFailure(
+              "Token refresh succeeded, but upstream still returned 401. Re-authentication required."
+            );
+            log?.warn?.(
+              "TOKEN",
+              `${provider?.toUpperCase()} | refreshed token still returned 401; connection marked expired`
+            );
+          }
           upstreamErrorParsed = false; // Let it be parsed downstream
         }
       } catch (retryErr) {
@@ -4573,7 +4653,7 @@ export async function handleChatCore({
       }
     } else {
       log?.warn?.("TOKEN", `${provider?.toUpperCase()} | refresh failed`);
-      if (isUnrecoverableRefreshError(newCredentials) && onCredentialsRefreshed) {
+      if (isUnrecoverableRefreshError(newCredentials)) {
         // Front 3 (reuse-race tolerance): before deactivating, re-read the DB.
         // If a sibling/concurrent refresh already rotated this connection's
         // refresh_token (common for Codex/OpenAI under one shared Auth0 client),
@@ -4595,7 +4675,9 @@ export async function handleChatCore({
           }
         }
         if (!alreadyRotated) {
-          await onCredentialsRefreshed({ testStatus: "expired", isActive: false });
+          await markConnectionExpiredForAuthFailure(
+            "Token refresh failed permanently. Re-authentication required."
+          );
         }
       }
     }

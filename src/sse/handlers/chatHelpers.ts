@@ -25,6 +25,7 @@ import {
   isTlsFingerprintActive,
 } from "@omniroute/open-sse/utils/proxyFetch.ts";
 import { resolveProxyForConnection } from "@/lib/localDb";
+import { updateProviderConnection } from "@/lib/db/providers";
 import { CircuitBreakerOpenError, getCircuitBreaker } from "../../shared/utils/circuitBreaker";
 import { classify429FromError, type FailureKind } from "../../shared/utils/classify429";
 import { resolveUseUpstream429BreakerHints } from "../../shared/utils/providerHints";
@@ -198,7 +199,8 @@ export async function resolveModelOrError(
       const { getCombos } = await import("@/lib/localDb");
       const all = await getCombos();
       for (const c of all) {
-        const name = typeof c === "object" && c !== null ? (c as Record<string, unknown>).name : undefined;
+        const name =
+          typeof c === "object" && c !== null ? (c as Record<string, unknown>).name : undefined;
         if (typeof name === "string" && name.startsWith("auto/")) available.push(name);
       }
     } catch {
@@ -355,6 +357,7 @@ export async function executeChatWithBreaker({
   providerProfile,
   cachedSettings,
   skipUpstreamRetry = false,
+  allowedConnectionIds = null,
   trafficType = "production",
 }: ExecuteChatWithBreakerOptions): Promise<{ result: any; tlsFingerprintUsed: boolean }> {
   let tlsFingerprintUsed = false;
@@ -384,6 +387,7 @@ export async function executeChatWithBreaker({
           disableEmergencyFallback: isCombo,
           cachedSettings,
           skipUpstreamRetry,
+          allowedConnectionIds,
           trafficType: normalizedTrafficType,
           onCredentialsRefreshed: async (newCreds: any) => {
             await updateProviderCredentials(credentials.connectionId, {
@@ -430,6 +434,18 @@ export async function executeChatWithBreaker({
               model,
               providerProfile
             );
+            if (is401) {
+              const failedAt = new Date().toISOString();
+              await updateProviderConnection(credentials.connectionId, {
+                isActive: false,
+                testStatus: "expired",
+                lastErrorType: "unauthorized",
+                lastError: String(failure?.message || failure?.code || "stream failure"),
+                errorCode: HTTP_STATUS.UNAUTHORIZED,
+                lastErrorAt: failedAt,
+                lastTested: failedAt,
+              });
+            }
           },
         })
       );

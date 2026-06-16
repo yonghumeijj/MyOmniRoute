@@ -4745,8 +4745,6 @@ export default function ProviderDetailPage() {
               const hasAnyTag = sorted.some(
                 (c) => c.providerSpecificData?.tag as string | undefined
               );
-              const allSelected = selectedIds.size === connections.length && connections.length > 0;
-              const someSelected = selectedIds.size > 0 && selectedIds.size < connections.length;
               const bulkBusy = batchUpdating !== null || batchRetesting || batchDeleting;
               const bulkActions = selectedIds.size > 0 && (
                 <div className="flex flex-wrap items-center justify-end gap-2">
@@ -4939,8 +4937,10 @@ export default function ProviderDetailPage() {
                           isLast={index === pageConnections.length - 1}
                           isSelected={selectedIds.has(conn.id)}
                           onToggleSelect={() => handleToggleSelectOne(conn.id)}
-                          onMoveUp={() => handleSwapPriority(conn, sorted[index - 1])}
-                          onMoveDown={() => handleSwapPriority(conn, sorted[index + 1])}
+                          onMoveUp={() => handleSwapPriority(conn, filtered[pageStart + index - 1])}
+                          onMoveDown={() =>
+                            handleSwapPriority(conn, filtered[pageStart + index + 1])
+                          }
                           onToggleActive={(isActive) =>
                             handleUpdateConnectionStatus(conn.id, isActive)
                           }
@@ -5043,8 +5043,12 @@ export default function ProviderDetailPage() {
               }
 
               // Build ordered tag groups: untagged first, then alphabetically
+              const pageConnections = filtered.slice(pageStart, pageEnd);
+              const pageAllSelected =
+                pageConnections.length > 0 && pageConnections.every((c) => selectedIds.has(c.id));
+              const pageSomeSelected = pageConnections.some((c) => selectedIds.has(c.id));
               const groupMap = new Map<string, ConnectionRowConnection[]>();
-              for (const conn of filtered) {
+              for (const conn of pageConnections) {
                 const tag = (conn.providerSpecificData?.tag as string | undefined)?.trim() || "";
                 if (!groupMap.has(tag)) groupMap.set(tag, []);
                 groupMap.get(tag)!.push(conn);
@@ -5057,17 +5061,32 @@ export default function ProviderDetailPage() {
 
               return (
                 <>
-                  {selectedIds.size > 0 || connections.length > 0 ? (
+                  {selectedIds.size > 0 || filtered.length > 0 ? (
                     <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 px-3 py-2 bg-muted/50 rounded-t-lg border border-b-0 border-border">
                       <div className="flex items-center gap-2 flex-wrap">
                         <label className="flex items-center gap-2 cursor-pointer select-none">
                           <input
                             type="checkbox"
-                            checked={allSelected}
+                            checked={pageAllSelected}
                             ref={(el) => {
-                              if (el) el.indeterminate = someSelected;
+                              if (el) el.indeterminate = pageSomeSelected;
                             }}
-                            onChange={handleToggleSelectAll}
+                            onChange={() => {
+                              if (pageAllSelected) {
+                                const toRemove = new Set(pageConnections.map((c) => c.id));
+                                setSelectedIds((prev) => {
+                                  const next = new Set(prev);
+                                  for (const id of toRemove) next.delete(id);
+                                  return next;
+                                });
+                              } else {
+                                setSelectedIds((prev) => {
+                                  const next = new Set(prev);
+                                  for (const c of pageConnections) next.add(c.id);
+                                  return next;
+                                });
+                              }
+                            }}
                             className="w-4 h-4 rounded border-border text-primary focus:ring-primary/30 cursor-pointer"
                           />
                           <span className="text-sm font-medium text-text-muted">
@@ -5100,7 +5119,12 @@ export default function ProviderDetailPage() {
                     </div>
                   ) : null}
                   <div className="flex flex-col gap-0 border border-t-0 border-border rounded-b-lg overflow-hidden">
-                    {groupKeys.map((tag, gi) => {
+                    {pageConnections.length === 0 ? (
+                      <div className="px-3 py-6 text-center text-sm text-text-muted">
+                        {t("noFilteredConnections", "No connections match the current filter.")}
+                      </div>
+                    ) : (
+                      groupKeys.map((tag, gi) => {
                       const groupConns = groupMap.get(tag)!;
                       return (
                         <div
@@ -5149,10 +5173,10 @@ export default function ProviderDetailPage() {
                                 isSelected={selectedIds.has(conn.id)}
                                 onToggleSelect={() => handleToggleSelectOne(conn.id)}
                                 onMoveUp={() =>
-                                  handleSwapPriority(conn, sorted[sorted.indexOf(conn) - 1])
+                                  handleSwapPriority(conn, filtered[filtered.indexOf(conn) - 1])
                                 }
                                 onMoveDown={() =>
-                                  handleSwapPriority(conn, sorted[sorted.indexOf(conn) + 1])
+                                  handleSwapPriority(conn, filtered[filtered.indexOf(conn) + 1])
                                 }
                                 onToggleActive={(isActive) =>
                                   handleUpdateConnectionStatus(conn.id, isActive)
@@ -5250,8 +5274,10 @@ export default function ProviderDetailPage() {
                           </div>
                         </div>
                       );
-                    })}
+                      })
+                    )}
                   </div>
+                  {paginationBar}
                 </>
               );
             })()

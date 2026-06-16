@@ -99,10 +99,7 @@ import {
   resolveCooldownAwareRetrySettings,
   waitForCooldownAwareRetry,
 } from "../services/cooldownAwareRetry";
-import {
-  constrainConnectionsToQuota,
-  resolveQuotaKeyScope,
-} from "../../lib/quota/quotaKey";
+import { constrainConnectionsToQuota, resolveQuotaKeyScope } from "../../lib/quota/quotaKey";
 
 registerCodexQuotaFetcher();
 
@@ -1168,6 +1165,7 @@ async function handleSingleModelChat(
         providerProfile,
         cachedSettings: runtimeOptions.cachedSettings,
         skipUpstreamRetry: runtimeOptions.skipUpstreamRetry ?? false,
+        allowedConnectionIds: effectiveAllowedConnections,
       });
       if (telemetry) telemetry.endPhase();
 

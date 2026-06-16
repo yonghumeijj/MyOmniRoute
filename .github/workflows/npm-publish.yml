@@ -1,11 +1,6 @@
 name: Publish to npm
 
 on:
-  # 'released' (not 'published') so editing/re-publishing old releases does NOT
-  # re-trigger this workflow. Pairs with the semver guard below as defense in
-  # depth against accidental dist-tag clobbering by old releases.
-  release:
-    types: [released]
   workflow_dispatch:
     inputs:
       version:

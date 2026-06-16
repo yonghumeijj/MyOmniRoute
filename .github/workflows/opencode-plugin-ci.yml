@@ -1,10 +1,6 @@
 name: opencode-plugin CI
 
 on:
-  push:
-    branches: [main, release/v3.8.2]
-    paths:
-      - "@omniroute/opencode-plugin/**"
   pull_request:
     branches: [main, release/v3.8.2]
     paths:
